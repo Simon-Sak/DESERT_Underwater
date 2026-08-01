@@ -4,7 +4,9 @@
 #include <algorithm>
 #include <cctype>
 #include <cstring>
+#include <iomanip>
 #include <iostream>
+#include <sstream>
 
 static class PackerUWPQCClass : public TclClass
 {
@@ -20,6 +22,48 @@ public:
 		return (new packerUWPQC());
 	}
 } class_module_packerUWPQC;
+
+namespace {
+
+std::string
+bytesToHex(const std::vector<uint8_t>& data)
+{
+	std::ostringstream out;
+	out << std::hex << std::setfill('0');
+	for (uint8_t byte : data) {
+		out << std::setw(2) << static_cast<int>(byte);
+	}
+	return out.str();
+}
+
+bool
+hexToBytes(const char *text, std::vector<uint8_t>& data)
+{
+	data.clear();
+	if (text == nullptr) {
+		return false;
+	}
+
+	const size_t length = strlen(text);
+	if ((length % 2) != 0) {
+		return false;
+	}
+
+	data.reserve(length / 2);
+	for (size_t index = 0; index < length; index += 2) {
+		unsigned int value = 0;
+		std::istringstream input(std::string(text + index, 2));
+		input >> std::hex >> value;
+		if (input.fail()) {
+			return false;
+		}
+		data.push_back(static_cast<uint8_t>(value & 0xFF));
+	}
+
+	return true;
+}
+
+} // namespace
 
 packerUWPQC::packerUWPQC()
 	: packer(false)
@@ -42,52 +86,61 @@ packerUWPQC::packerUWPQC()
 int
 packerUWPQC::command(int argc, const char *const *argv)
 {
-	if (argc == 2 && strcmp(argv[1], "runNtruFalconDemo") == 0) {
+	if (argc == 3 && strcmp(argv[1], "kemEncapsulate") == 0) {
 #ifdef HAVE_LIBOQS
-		if (kem_ == nullptr || sig_ == nullptr) {
-			std::cerr << "UWPQC: KEM/SIG context is not initialized" << std::endl;
+		std::vector<uint8_t> plaintext(argv[2], argv[2] + strlen(argv[2]));
+		std::vector<uint8_t> ciphertext = encapsulate(plaintext);
+		if (ciphertext.empty()) {
 			return TCL_ERROR;
 		}
-
-		std::vector<uint8_t> demo_payload;
-		const char *payload = "DESERT-NTRU-FALCON";
-		demo_payload.assign(payload, payload + strlen(payload));
-
-		std::vector<uint8_t> ciphertext = encapsulate(demo_payload);
-		std::vector<uint8_t> ss_dec = decapsulate(ciphertext);
-		// Ensure signature keys exist if signature usage is enabled
-		if (use_sig_) {
-			if (sig_ == nullptr) {
-				std::cerr << "UWPQC: SIG context is not initialized" << std::endl;
-			} else if (sig_public_key_.empty() || sig_secret_key_.empty()) {
-				generateSigKeys();
-			}
-		}
-		std::vector<uint8_t> signature = sign(demo_payload);
-		bool verify_ok = verify(demo_payload, signature);
-
-		const bool ss_match = (!ss_dec.empty() && shared_secret_ == ss_dec);
-		std::cout << "UWPQC demo: kem=" << pqc_kem_alg_
-			  << " sig=" << pqc_sig_alg_
-			  << " ct=" << ciphertext.size()
-			  << " siglen=" << signature.size()
-			  << " ss_match=" << (ss_match ? 1 : 0)
-			  << " verify=" << (verify_ok ? 1 : 0) << std::endl;
-
-		return (ss_match && verify_ok) ? TCL_OK : TCL_ERROR;
+		Tcl::instance().result(bytesToHex(ciphertext).c_str());
+		return TCL_OK;
 #else
-		std::cerr << "UWPQC: liboqs not available" << std::endl;
 		return TCL_ERROR;
 #endif
 	}
-	else if (argc == 2 && strcmp(argv[1], "sendTestData") == 0) {
-		std::vector<uint8_t> plaintext;
-		const char *payload = "DESERT-PQC";
-		plaintext.assign(payload, payload + strlen(payload));
-		std::vector<uint8_t> ciphertext = encapsulate(plaintext);
-		std::cout << "UWPQC: test payload size=" << plaintext.size()
-			  << " ciphertext size=" << ciphertext.size() << std::endl;
+	else if (argc == 3 && strcmp(argv[1], "kemDecapsulate") == 0) {
+#ifdef HAVE_LIBOQS
+		std::vector<uint8_t> ciphertext;
+		if (!hexToBytes(argv[2], ciphertext)) {
+			return TCL_ERROR;
+		}
+		std::vector<uint8_t> shared_secret = decapsulate(ciphertext);
+		if (shared_secret.empty()) {
+			return TCL_ERROR;
+		}
+		Tcl::instance().result(bytesToHex(shared_secret).c_str());
 		return TCL_OK;
+#else
+		return TCL_ERROR;
+#endif
+	}
+	else if (argc == 3 && strcmp(argv[1], "sigSign") == 0) {
+#ifdef HAVE_LIBOQS
+		std::vector<uint8_t> message(argv[2], argv[2] + strlen(argv[2]));
+		std::vector<uint8_t> signature = sign(message);
+		if (signature.empty()) {
+			return TCL_ERROR;
+		}
+		Tcl::instance().result(bytesToHex(signature).c_str());
+		return TCL_OK;
+#else
+		return TCL_ERROR;
+#endif
+	}
+	else if (argc == 4 && strcmp(argv[1], "sigVerify") == 0) {
+#ifdef HAVE_LIBOQS
+		std::vector<uint8_t> message(argv[2], argv[2] + strlen(argv[2]));
+		std::vector<uint8_t> signature;
+		if (!hexToBytes(argv[3], signature)) {
+			return TCL_ERROR;
+		}
+		const bool ok = verify(message, signature);
+		Tcl::instance().result(ok ? "1" : "0");
+		return TCL_OK;
+#else
+		return TCL_ERROR;
+#endif
 	}
 	else if (argc == 3 && strcmp(argv[1], "setKemAlgorithm") == 0) {
 		// Set KEM algorithm dynamically
