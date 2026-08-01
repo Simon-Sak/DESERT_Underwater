@@ -555,7 +555,8 @@ unpack_desertframework() {
                  ${BELLHOP_TAR_FILE}   \
                  ${NETCDF_TAR_FILE}    \
                  ${NETCDFCXX_TAR_FILE} \
-                 ${WOSS_TAR_FILE}"
+                 ${WOSS_TAR_FILE}      \
+                 ${LIBOQS_TAR_FILE}"
     if [ -d ${UNPACKED_FOLDER} ]; then
         log_L2 "[unpack_desertframework]: the ${UNPACKED_FOLDER} exists." ${INSTALL_LOG}
         warn_L1 "Detected folder"

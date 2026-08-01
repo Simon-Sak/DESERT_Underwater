@@ -100,6 +100,8 @@ main() {
     handle_package host NS
     handle_package host NSMIRACLE
     handle_package host DESERT
+    # liboqs: post-quantum crypto library (fetched as a tarball)
+    handle_package host LIBOQS
     if [ ${WITHWOSS} -eq 1 ]; then
         handle_package host HDF5
         handle_package host NETCDF
@@ -965,5 +967,45 @@ build_WOSS() {
     ok_L1 "completed in ${elapsed}s"
 }
 
+#***
+# << LIBOQS package >>
+# -------
+build_LIBOQS() {
+    info_L1 "liboqs"
+    start="$(date +%s)"
+
+    if [ -f Makefile ]; then
+        make distclean > "${currentBuildLog}/liboqs-$*.log" 2>&1 || true
+    fi
+
+    info_L2 "cmake      [$*]"
+    mkdir -p build
+    cd build
+    cmake -DCMAKE_INSTALL_PREFIX=${DEST_FOLDER} .. >> "${currentBuildLog}/liboqs-$*.log" 2>&1
+    if [ $? -ne 0 ]; then
+        err_L1 "Error during cmake configuration of liboqs! Exiting ..."
+        tail -n 50 ${currentBuildLog}/liboqs-$*.log
+        exit 1
+    fi
+
+    info_L2 "make       [$*]"
+    make -j ${MAKE_JOBS} >> "${currentBuildLog}/liboqs-$*.log" 2>&1
+    if [ $? -ne 0 ]; then
+        err_L1 "Error during the compilation of liboqs! Exiting ..."
+        tail -n 50 ${currentBuildLog}/liboqs-$*.log
+        exit 1
+    fi
+
+    info_L2 "make inst  [$*]"
+    make install >> "${currentBuildLog}/liboqs-$*.log" 2>&1
+    if [ $? -ne 0 ]; then
+        err_L1 "Error during the installation of liboqs! Exiting ..."
+        tail -n 50 ${currentBuildLog}/liboqs-$*.log
+        exit 1
+    fi
+
+    elapsed=`expr $(date +%s) - $start`
+    ok_L1 "completed in ${elapsed}s"
+}
 main
 
