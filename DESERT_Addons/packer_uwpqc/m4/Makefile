@@ -170,14 +170,14 @@ CTAGS = ctags
 CXX = g++
 CXXCPP = g++ -E
 CXXDEPMODE = depmode=gcc3
-CXXFLAGS = -I/home/mr-test/Downloads/final_project/DESERT_Underwater/DESERT_Framework/DESERT -I/home/mr-test/Downloads/final_project/DESERT_Underwater/DESERT_buildCopy_LOCAL_CLEAN/.buildHost/DESERT -I/home/mr-test/Downloads/final_project/DESERT_Underwater/DESERT_buildCopy_LOCAL_CLEAN/.buildHost/liboqs-0.16.0/build/include -g
+CXXFLAGS = -g -O2
 CYGPATH_W = echo
-DEFS = -DPACKAGE_NAME=\"packeruwpqc\" -DPACKAGE_TARNAME=\"packeruwpqc\" -DPACKAGE_VERSION=\"1.0.0\" -DPACKAGE_STRING=\"packeruwpqc\ 1.0.0\" -DPACKAGE_BUGREPORT=\"\" -DPACKAGE_URL=\"\" -DPACKAGE=\"packeruwpqc\" -DVERSION=\"1.0.0\" -DHAVE_STDIO_H=1 -DHAVE_STDLIB_H=1 -DHAVE_STRING_H=1 -DHAVE_INTTYPES_H=1 -DHAVE_STDINT_H=1 -DHAVE_STRINGS_H=1 -DHAVE_SYS_STAT_H=1 -DHAVE_SYS_TYPES_H=1 -DHAVE_UNISTD_H=1 -DSTDC_HEADERS=1 -DHAVE_DLFCN_H=1 -DLT_OBJDIR=\".libs/\" -DHAVE_LIBOQS=1 -DCPP_NAMESPACE=std
+DEFS = -DPACKAGE_NAME=\"packeruwpqc\" -DPACKAGE_TARNAME=\"packeruwpqc\" -DPACKAGE_VERSION=\"1.0.0\" -DPACKAGE_STRING=\"packeruwpqc\ 1.0.0\" -DPACKAGE_BUGREPORT=\"\" -DPACKAGE_URL=\"\" -DPACKAGE=\"packeruwpqc\" -DVERSION=\"1.0.0\" -DHAVE_STDIO_H=1 -DHAVE_STDLIB_H=1 -DHAVE_STRING_H=1 -DHAVE_INTTYPES_H=1 -DHAVE_STDINT_H=1 -DHAVE_STRINGS_H=1 -DHAVE_SYS_STAT_H=1 -DHAVE_SYS_TYPES_H=1 -DHAVE_UNISTD_H=1 -DSTDC_HEADERS=1 -DHAVE_DLFCN_H=1 -DLT_OBJDIR=\".libs/\" -DCPP_NAMESPACE=std
 DEPDIR = .deps
 DESERT_CPPFLAGS =  -I/home/mr-test/Downloads/final_project/DESERT_Underwater/DESERT_Framework/DESERT/network/uwip -I/home/mr-test/Downloads/final_project/DESERT_Underwater/DESERT_Framework/DESERT/physical/uw-al
 DESERT_DISTCHECK_CONFIGURE_FLAGS = --with-desert=/home/mr-test/Downloads/final_project/DESERT_Underwater/DESERT_Framework/DESERT
 DESERT_LDFLAGS =  -L/home/mr-test/Downloads/final_project/DESERT_Underwater/DESERT_Framework/DESERT/network/uwip -L/home/mr-test/Downloads/final_project/DESERT_Underwater/DESERT_Framework/DESERT/physical/uw-al
-DESERT_LDFLAGS_BUILD =  -L/home/mr-test/Downloads/final_project/DESERT_Underwater/DESERT_buildCopy_LOCAL_CLEAN/.buildHost/DESERT/network/uwip -L/home/mr-test/Downloads/final_project/DESERT_Underwater/DESERT_buildCopy_LOCAL_CLEAN/.buildHost/DESERT/physical/uw-al
+DESERT_LDFLAGS_BUILD = 
 DESERT_LIBADD =  -luwip -luwal
 DLLTOOL = dlltool
 DSYMUTIL = 
@@ -197,9 +197,9 @@ INSTALL_PROGRAM = ${INSTALL}
 INSTALL_SCRIPT = ${INSTALL}
 INSTALL_STRIP_PROGRAM = $(install_sh) -c -s
 LD = /usr/bin/x86_64-linux-gnu-ld -m elf_x86_64
-LDFLAGS = -L/home/mr-test/Downloads/final_project/DESERT_Underwater/DESERT_buildCopy_LOCAL_CLEAN/.buildHost/liboqs-0.16.0/build/lib -Wl,-rpath,/home/mr-test/Downloads/final_project/DESERT_Underwater/DESERT_buildCopy_LOCAL_CLEAN/.buildHost/liboqs-0.16.0/build/lib
+LDFLAGS = 
 LIBOBJS = 
-LIBS = -loqs -lm -lcrypto -lpthread
+LIBS = 
 LIBTOOL = $(SHELL) $(top_builddir)/libtool
 LIPO = 
 LN_S = ln -s
@@ -222,7 +222,7 @@ OBJDUMP = objdump
 OBJEXT = o
 OQS_CPPFLAGS = -I/home/mr-test/Downloads/final_project/DESERT_Underwater/DESERT_buildCopy_LOCAL_CLEAN/.buildHost/liboqs-0.16.0/build/include
 OQS_LDFLAGS = -L/home/mr-test/Downloads/final_project/DESERT_Underwater/DESERT_buildCopy_LOCAL_CLEAN/.buildHost/liboqs-0.16.0/build/lib
-OQS_LIBADD = -loqs
+OQS_LIBADD = -loqs -lssl -lcrypto
 OTOOL = 
 OTOOL64 = 
 PACKAGE = packeruwpqc
@@ -284,7 +284,7 @@ mandir = ${datarootdir}/man
 mkdir_p = $(MKDIR_P)
 oldincludedir = /usr/include
 pdfdir = ${docdir}
-prefix = /home/mr-test/Downloads/final_project/DESERT_Underwater/DESERT_buildCopy_LOCAL_CLEAN
+prefix = /usr/local
 program_transform_name = s,x,x,
 psdir = ${docdir}
 runstatedir = ${localstatedir}/run
@@ -309,9 +309,9 @@ $(srcdir)/Makefile.in:  $(srcdir)/Makefile.am  $(am__configure_deps)
 	      exit 1;; \
 	  esac; \
 	done; \
-	echo ' cd $(top_srcdir) && $(AUTOMAKE) --foreign m4/Makefile'; \
+	echo ' cd $(top_srcdir) && $(AUTOMAKE) --gnu m4/Makefile'; \
 	$(am__cd) $(top_srcdir) && \
-	  $(AUTOMAKE) --foreign m4/Makefile
+	  $(AUTOMAKE) --gnu m4/Makefile
 Makefile: $(srcdir)/Makefile.in $(top_builddir)/config.status
 	@case '$?' in \
 	  *config.status*) \

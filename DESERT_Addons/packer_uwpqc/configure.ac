@@ -62,8 +62,8 @@ fi
 # Check for liboqs library (optional but recommended for PQC support)
 AC_ARG_WITH([oqs],
   AS_HELP_STRING([--with-oqs=PATH], [path to liboqs installation]),
-  [OQS_PATH=$withval; OQS_CPPFLAGS="-I${withval}/include"; OQS_LDFLAGS="-L${withval}/lib"; OQS_LIBADD="-loqs"],
-  [OQS_PATH=""; OQS_CPPFLAGS=""; OQS_LDFLAGS=""; OQS_LIBADD="-loqs"]
+  [OQS_PATH=$withval; OQS_CPPFLAGS="-I${withval}/include"; OQS_LDFLAGS="-L${withval}/lib"; OQS_LIBADD="-loqs -lssl -lcrypto"],
+  [OQS_PATH=""; OQS_CPPFLAGS=""; OQS_LDFLAGS=""; OQS_LIBADD="-loqs -lssl -lcrypto"]
 )
 
 # Try to find liboqs library

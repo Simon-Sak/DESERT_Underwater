@@ -309,20 +309,32 @@ proc runPqcDemo {} {
     global pqc opt
 
     set payload "DESERT-PQC-demo"
-    if {[catch {$pqc(0) kemEncapsulate $payload} ct]} {
-        set ct "unavailable"
+    set challenge "pqc-handshake-$payload"
+
+    catch {$pqc(0) resetHandshake} reset0
+    catch {$pqc(1) resetHandshake} reset1
+
+    catch {$pqc(0) set use_sig_ 1} ignore0
+    catch {$pqc(1) set use_sig_ 1} ignore1
+    if {[catch {$pqc(0) buildHello $challenge} helloHex]} {
+        set helloHex "unavailable"
     }
-    if {[catch {$pqc(0) sigSign $payload} sig]} {
-        set sig "unavailable"
+    if {[catch {$pqc(1) processHello $helloHex $challenge} responseHex]} {
+        set responseHex "unavailable"
     }
-    if {[catch {$pqc(0) sigVerify $payload $sig} verified]} {
-        set verified 0
+    if {[catch {$pqc(0) processResponse $responseHex $challenge} success]} {
+        set success 0
+    }
+    if {[catch {$pqc(0) getSharedSecret} sharedSecret]} {
+        set sharedSecret "unavailable"
     }
 
     puts "PQC demo payload        : $payload"
-    puts "PQC demo ciphertext     : $ct"
-    puts "PQC demo signature      : $sig"
-    puts "PQC demo verification   : $verified"
+    puts "PQC handshake challenge  : $challenge"
+    puts "PQC handshake hello     : $helloHex"
+    puts "PQC handshake response  : $responseHex"
+    puts "PQC handshake success   : $success"
+    puts "PQC shared secret       : $sharedSecret"
 }
 
 runPqcDemo

@@ -63,6 +63,48 @@ hexToBytes(const char *text, std::vector<uint8_t>& data)
 	return true;
 }
 
+void
+appendUint16(std::vector<uint8_t>& out, uint16_t value)
+{
+	out.push_back(static_cast<uint8_t>((value >> 8) & 0xFF));
+	out.push_back(static_cast<uint8_t>(value & 0xFF));
+}
+
+bool
+readUint16(const std::vector<uint8_t>& data, size_t& offset, uint16_t& value)
+{
+	if (offset + 2 > data.size()) {
+		return false;
+	}
+	value = (static_cast<uint16_t>(data[offset]) << 8) |
+		static_cast<uint16_t>(data[offset + 1]);
+	offset += 2;
+	return true;
+}
+
+void
+appendLengthPrefixedBytes(std::vector<uint8_t>& out, const std::vector<uint8_t>& data)
+{
+	appendUint16(out, static_cast<uint16_t>(data.size()));
+	out.insert(out.end(), data.begin(), data.end());
+}
+
+bool
+readLengthPrefixedBytes(const std::vector<uint8_t>& data, size_t& offset,
+					 std::vector<uint8_t>& out)
+{
+	uint16_t length = 0;
+	if (!readUint16(data, offset, length)) {
+		return false;
+	}
+	if (offset + length > data.size()) {
+		return false;
+	}
+	out.assign(data.begin() + offset, data.begin() + offset + length);
+	offset += length;
+	return true;
+}
+
 } // namespace
 
 packerUWPQC::packerUWPQC()
@@ -72,10 +114,11 @@ packerUWPQC::packerUWPQC()
 	, ct_len_bits_(16)
 	, sig_len_bits_(16)
 	, use_kem_(1)
-	, use_sig_(false)
+	, use_sig_(1)
 #ifdef HAVE_LIBOQS
 	, kem_(nullptr), sig_(nullptr)
 #endif
+	, handshake_state_(HS_IDLE)
 {
 	bind("debug_", &debug_);
 	bind("use_kem_", &use_kem_);
@@ -141,6 +184,58 @@ packerUWPQC::command(int argc, const char *const *argv)
 #else
 		return TCL_ERROR;
 #endif
+	}
+	else if (argc == 3 && strcmp(argv[1], "buildHello") == 0) {
+#ifdef HAVE_LIBOQS
+		std::vector<uint8_t> challenge(argv[2], argv[2] + strlen(argv[2]));
+		std::vector<uint8_t> hello = buildHelloMessage(challenge);
+		if (hello.empty()) {
+			return TCL_ERROR;
+		}
+		Tcl::instance().result(bytesToHex(hello).c_str());
+		return TCL_OK;
+#else
+		return TCL_ERROR;
+#endif
+	}
+	else if (argc == 4 && strcmp(argv[1], "processHello") == 0) {
+#ifdef HAVE_LIBOQS
+		std::vector<uint8_t> hello;
+		if (!hexToBytes(argv[2], hello)) {
+			return TCL_ERROR;
+		}
+		std::vector<uint8_t> challenge(argv[3], argv[3] + strlen(argv[3]));
+		std::vector<uint8_t> response = processHelloMessage(hello, challenge);
+		if (response.empty()) {
+			return TCL_ERROR;
+		}
+		Tcl::instance().result(bytesToHex(response).c_str());
+		return TCL_OK;
+#else
+		return TCL_ERROR;
+#endif
+	}
+	else if (argc == 4 && strcmp(argv[1], "processResponse") == 0) {
+#ifdef HAVE_LIBOQS
+		std::vector<uint8_t> response;
+		if (!hexToBytes(argv[2], response)) {
+			return TCL_ERROR;
+		}
+		std::vector<uint8_t> challenge(argv[3], argv[3] + strlen(argv[3]));
+		std::vector<uint8_t> shared_secret = processResponseMessage(response, challenge);
+		Tcl::instance().result(shared_secret.empty() ? "0" : "1");
+		return TCL_OK;
+#else
+		return TCL_ERROR;
+#endif
+	}
+	else if (argc == 2 && strcmp(argv[1], "getSharedSecret") == 0) {
+		Tcl::instance().result(bytesToHex(shared_secret_).c_str());
+		return TCL_OK;
+	}
+	else if (argc == 2 && strcmp(argv[1], "resetHandshake") == 0) {
+		resetHandshakeState();
+		return TCL_OK;
 	}
 	else if (argc == 3 && strcmp(argv[1], "setKemAlgorithm") == 0) {
 		// Set KEM algorithm dynamically
@@ -373,6 +468,8 @@ packerUWPQC::generateKEMKeys()
 		// Store keys as vectors
 		kem_public_key_.assign(public_key, public_key + kem_->length_public_key);
 		kem_secret_key_.assign(secret_key, secret_key + kem_->length_secret_key);
+		std::cerr << "UWPQC: generated KEM keypair status=" << status
+			  << " pub=" << kem_public_key_.size() << " sec=" << kem_secret_key_.size() << std::endl;
 		
 		if (debug_) {
 			std::cout << "UWPQC: Generated KEM keypair (" 
@@ -405,6 +502,8 @@ packerUWPQC::generateSigKeys()
 		// Store keys as vectors
 		sig_public_key_.assign(public_key, public_key + sig_->length_public_key);
 		sig_secret_key_.assign(secret_key, secret_key + sig_->length_secret_key);
+		std::cerr << "UWPQC: generated SIG keypair status=" << status
+			  << " pub=" << sig_public_key_.size() << " sec=" << sig_secret_key_.size() << std::endl;
 		
 		if (debug_) {
 			std::cout << "UWPQC: Generated SIG keypair (" 
@@ -423,26 +522,30 @@ packerUWPQC::generateSigKeys()
 std::vector<uint8_t>
 packerUWPQC::encapsulate(const std::vector<uint8_t>& plaintext)
 {
+	(void)plaintext;
+	return encapsulateWithPublicKey(kem_public_key_);
+}
+
+std::vector<uint8_t>
+packerUWPQC::encapsulateWithPublicKey(const std::vector<uint8_t>& peer_public_key)
+{
 #ifdef HAVE_LIBOQS
-	if (kem_ == nullptr || kem_public_key_.empty()) {
+	if (kem_ == nullptr || peer_public_key.empty()) {
 		return std::vector<uint8_t>();
 	}
 	
-	// Allocate ciphertext buffer
 	uint8_t *ciphertext = new uint8_t[kem_->length_ciphertext];
 	uint8_t *shared_secret = new uint8_t[kem_->length_shared_secret];
 	
-	// Encapsulate with the public key
 	OQS_STATUS status = OQS_KEM_encaps(kem_, ciphertext, shared_secret,
-									   kem_public_key_.data());
+									   peer_public_key.data());
 	
 	std::vector<uint8_t> result;
 	if (status == OQS_SUCCESS) {
 		result.assign(ciphertext, ciphertext + kem_->length_ciphertext);
 		shared_secret_.assign(shared_secret, shared_secret + kem_->length_shared_secret);
-		
 		if (debug_) {
-			std::cout << "UWPQC: Encapsulated data (" 
+			std::cout << "UWPQC: Encapsulated data ("
 				  << result.size() << " bytes ciphertext)" << std::endl;
 		}
 	} else {
@@ -495,6 +598,8 @@ packerUWPQC::sign(const std::vector<uint8_t>& message)
 {
 #ifdef HAVE_LIBOQS
 	if (sig_ == nullptr || sig_secret_key_.empty()) {
+		std::cerr << "UWPQC: sign failed: sig=" << (sig_ != nullptr)
+			  << " secret_size=" << sig_secret_key_.size() << std::endl;
 		return std::vector<uint8_t>();
 	}
 	
@@ -510,13 +615,14 @@ packerUWPQC::sign(const std::vector<uint8_t>& message)
 	std::vector<uint8_t> result;
 	if (status == OQS_SUCCESS) {
 		result.assign(signature, signature + sig_len);
+		std::cerr << "UWPQC: sign status=" << status << " siglen=" << sig_len << std::endl;
 		
 		if (debug_) {
 			std::cout << "UWPQC: Signed message (" 
 				  << result.size() << " bytes signature)" << std::endl;
 		}
 	} else {
-		std::cerr << "UWPQC: Failed to sign message" << std::endl;
+		std::cerr << "UWPQC: Failed to sign message, status=" << status << std::endl;
 	}
 	
 	delete[] signature;
@@ -529,15 +635,22 @@ bool
 packerUWPQC::verify(const std::vector<uint8_t>& message, 
 					 const std::vector<uint8_t>& signature)
 {
+	return verifyWithPublicKey(message, signature, sig_public_key_);
+}
+
+bool
+packerUWPQC::verifyWithPublicKey(const std::vector<uint8_t>& message,
+							 const std::vector<uint8_t>& signature,
+							 const std::vector<uint8_t>& public_key)
+{
 #ifdef HAVE_LIBOQS
-	if (sig_ == nullptr || sig_public_key_.empty()) {
+	if (sig_ == nullptr || public_key.empty()) {
 		return false;
 	}
 	
-	// Verify the signature
 	OQS_STATUS status = OQS_SIG_verify(sig_, message.data(), message.size(),
 									   signature.data(), signature.size(),
-									   sig_public_key_.data());
+									   public_key.data());
 	
 	if (status == OQS_SUCCESS) {
 		if (debug_) {
@@ -552,6 +665,177 @@ packerUWPQC::verify(const std::vector<uint8_t>& message,
 	}
 #endif
 	return false;
+}
+
+std::vector<uint8_t>
+packerUWPQC::buildHelloMessage(const std::vector<uint8_t>& challenge)
+{
+#ifdef HAVE_LIBOQS
+	if (kem_ == nullptr || sig_ == nullptr || kem_public_key_.empty() || sig_public_key_.empty()) {
+		std::cerr << "UWPQC: buildHello failed: kem=" << (kem_ != nullptr)
+			  << " sig=" << (sig_ != nullptr)
+			  << " kem_pub=" << kem_public_key_.size()
+			  << " sig_pub=" << sig_public_key_.size() << std::endl;
+		return std::vector<uint8_t>();
+	}
+
+	std::vector<uint8_t> payload;
+	payload.push_back(0x01);
+	appendLengthPrefixedBytes(payload, challenge);
+	appendLengthPrefixedBytes(payload, kem_public_key_);
+	appendLengthPrefixedBytes(payload, sig_public_key_);
+
+	std::vector<uint8_t> signature = sign(payload);
+	if (signature.empty()) {
+		return std::vector<uint8_t>();
+	}
+	appendLengthPrefixedBytes(payload, signature);
+	last_handshake_message_ = payload;
+	handshake_state_ = HS_HELLO_SENT;
+	return payload;
+#endif
+	return std::vector<uint8_t>();
+}
+
+std::vector<uint8_t>
+packerUWPQC::processHelloMessage(const std::vector<uint8_t>& hello_message,
+								 const std::vector<uint8_t>& challenge)
+{
+#ifdef HAVE_LIBOQS
+	if (hello_message.empty() || kem_ == nullptr || sig_ == nullptr) {
+		return std::vector<uint8_t>();
+	}
+
+	size_t offset = 0;
+	if (offset >= hello_message.size()) {
+		return std::vector<uint8_t>();
+	}
+	const uint8_t message_type = hello_message[offset++];
+	if (message_type != 0x01) {
+		return std::vector<uint8_t>();
+	}
+
+	std::vector<uint8_t> remote_challenge;
+	std::vector<uint8_t> remote_kem_public_key;
+	std::vector<uint8_t> remote_sig_public_key;
+	std::vector<uint8_t> incoming_signature;
+	if (!readLengthPrefixedBytes(hello_message, offset, remote_challenge)) {
+		return std::vector<uint8_t>();
+	}
+	if (!readLengthPrefixedBytes(hello_message, offset, remote_kem_public_key)) {
+		return std::vector<uint8_t>();
+	}
+	if (!readLengthPrefixedBytes(hello_message, offset, remote_sig_public_key)) {
+		return std::vector<uint8_t>();
+	}
+	if (!readLengthPrefixedBytes(hello_message, offset, incoming_signature)) {
+		return std::vector<uint8_t>();
+	}
+
+	std::vector<uint8_t> signed_message;
+	signed_message.push_back(0x01);
+	appendLengthPrefixedBytes(signed_message, remote_challenge);
+	appendLengthPrefixedBytes(signed_message, remote_kem_public_key);
+	appendLengthPrefixedBytes(signed_message, remote_sig_public_key);
+	if (!verifyWithPublicKey(signed_message, incoming_signature, remote_sig_public_key)) {
+		return std::vector<uint8_t>();
+	}
+
+	peer_kem_public_key_ = remote_kem_public_key;
+	peer_sig_public_key_ = remote_sig_public_key;
+
+	std::vector<uint8_t> response_payload;
+	response_payload.push_back(0x02);
+	appendLengthPrefixedBytes(response_payload, challenge);
+	appendLengthPrefixedBytes(response_payload, kem_public_key_);
+	appendLengthPrefixedBytes(response_payload, sig_public_key_);
+	std::vector<uint8_t> ciphertext = encapsulateWithPublicKey(remote_kem_public_key);
+	if (ciphertext.empty()) {
+		return std::vector<uint8_t>();
+	}
+	appendLengthPrefixedBytes(response_payload, ciphertext);
+	std::vector<uint8_t> response_signature = sign(response_payload);
+	if (response_signature.empty()) {
+		return std::vector<uint8_t>();
+	}
+	appendLengthPrefixedBytes(response_payload, response_signature);
+	last_handshake_message_ = response_payload;
+	handshake_state_ = HS_ESTABLISHED;
+	return response_payload;
+#endif
+	return std::vector<uint8_t>();
+}
+
+std::vector<uint8_t>
+packerUWPQC::processResponseMessage(const std::vector<uint8_t>& response_message,
+								 const std::vector<uint8_t>& challenge)
+{
+#ifdef HAVE_LIBOQS
+	if (response_message.empty()) {
+		return std::vector<uint8_t>();
+	}
+
+	size_t offset = 0;
+	if (offset >= response_message.size()) {
+		return std::vector<uint8_t>();
+	}
+	const uint8_t message_type = response_message[offset++];
+	if (message_type != 0x02) {
+		return std::vector<uint8_t>();
+	}
+
+	std::vector<uint8_t> response_challenge;
+	std::vector<uint8_t> remote_kem_public_key;
+	std::vector<uint8_t> remote_sig_public_key;
+	std::vector<uint8_t> ciphertext;
+	std::vector<uint8_t> incoming_signature;
+	if (!readLengthPrefixedBytes(response_message, offset, response_challenge)) {
+		return std::vector<uint8_t>();
+	}
+	if (!readLengthPrefixedBytes(response_message, offset, remote_kem_public_key)) {
+		return std::vector<uint8_t>();
+	}
+	if (!readLengthPrefixedBytes(response_message, offset, remote_sig_public_key)) {
+		return std::vector<uint8_t>();
+	}
+	if (!readLengthPrefixedBytes(response_message, offset, ciphertext)) {
+		return std::vector<uint8_t>();
+	}
+	if (!readLengthPrefixedBytes(response_message, offset, incoming_signature)) {
+		return std::vector<uint8_t>();
+	}
+
+	std::vector<uint8_t> signed_message;
+	signed_message.push_back(0x02);
+	appendLengthPrefixedBytes(signed_message, challenge);
+	appendLengthPrefixedBytes(signed_message, remote_kem_public_key);
+	appendLengthPrefixedBytes(signed_message, remote_sig_public_key);
+	appendLengthPrefixedBytes(signed_message, ciphertext);
+	if (!verifyWithPublicKey(signed_message, incoming_signature, remote_sig_public_key)) {
+		return std::vector<uint8_t>();
+	}
+	peer_kem_public_key_ = remote_kem_public_key;
+	peer_sig_public_key_ = remote_sig_public_key;
+
+	std::vector<uint8_t> shared_secret = decapsulate(ciphertext);
+	if (shared_secret.empty()) {
+		return std::vector<uint8_t>();
+	}
+	shared_secret_ = shared_secret;
+	handshake_state_ = HS_ESTABLISHED;
+	return shared_secret_;
+#endif
+	return std::vector<uint8_t>();
+}
+
+void
+packerUWPQC::resetHandshakeState()
+{
+	peer_kem_public_key_.clear();
+	peer_sig_public_key_.clear();
+	last_handshake_message_.clear();
+	shared_secret_.clear();
+	handshake_state_ = HS_IDLE;
 }
 
 size_t
@@ -577,28 +861,37 @@ packerUWPQC::packMyHdr(Packet *p, unsigned char *buf, size_t offset)
 		packet_material[i] = static_cast<uint8_t>((seq_no + i) & 0xFF);
 	}
 	
+	std::vector<uint8_t> ciphertext;
+	std::vector<uint8_t> signature;
 	if (use_kem_) {
 		hdr.flags_ |= 0x01;
-		std::vector<uint8_t> ciphertext = encapsulate(packet_material);
+		ciphertext = encapsulate(packet_material);
 		if (!ciphertext.empty()) {
-			hdr.ct_len_ = (ciphertext.size() > 512) ? 512 : ciphertext.size();
+			hdr.ct_len_ = static_cast<uint16_t>(ciphertext.size());
 		}
 	}
 	
 	if (use_sig_) {
 		hdr.flags_ |= 0x02;
-		std::vector<uint8_t> signature = sign(packet_material);
+		signature = sign(packet_material);
 		if (!signature.empty()) {
-			hdr.sig_len_ = (signature.size() > 512) ? 512 : signature.size();
+			hdr.sig_len_ = static_cast<uint16_t>(signature.size());
 		}
 	}
 	
-	// Pack the header fields using packer's put() method
 	int field_idx = 0;
 	offset += put(buf, offset, &hdr.version_, n_bits[field_idx++]);
 	offset += put(buf, offset, &hdr.flags_, n_bits[field_idx++]);
 	offset += put(buf, offset, &hdr.ct_len_, n_bits[field_idx++]);
 	offset += put(buf, offset, &hdr.sig_len_, n_bits[field_idx++]);
+	for (size_t i = 0; i < ciphertext.size(); ++i) {
+		uint8_t byte = ciphertext[i];
+		offset += put(buf, offset, &byte, 8);
+	}
+	for (size_t i = 0; i < signature.size(); ++i) {
+		uint8_t byte = signature[i];
+		offset += put(buf, offset, &byte, 8);
+	}
 	
 	if (debug_) {
 		std::cout << "\033[0;46;30m TX PQC packer hdr \033[0m" << std::endl;
@@ -622,12 +915,32 @@ packerUWPQC::unpackMyHdr(unsigned char *buf, size_t offset, Packet *p)
 	offset += get(buf, offset, &hdr.ct_len_, n_bits[field_idx++]);
 	offset += get(buf, offset, &hdr.sig_len_, n_bits[field_idx++]);
 	
+	std::vector<uint8_t> ciphertext;
+	std::vector<uint8_t> signature;
+	ciphertext.resize(hdr.ct_len_);
+	for (uint16_t i = 0; i < hdr.ct_len_; ++i) {
+		uint8_t byte = 0;
+		offset += get(buf, offset, &byte, 8);
+		ciphertext[i] = byte;
+	}
+	signature.resize(hdr.sig_len_);
+	for (uint16_t i = 0; i < hdr.sig_len_; ++i) {
+		uint8_t byte = 0;
+		offset += get(buf, offset, &byte, 8);
+		signature[i] = byte;
+	}
 	if (debug_) {
 		std::cout << "\033[0;46;30m RX PQC packer hdr \033[0m" << std::endl;
 		std::cout << "  Version: " << (int)hdr.version_ << std::endl;
 		std::cout << "  Flags: 0x" << std::hex << (int)hdr.flags_ << std::dec << std::endl;
 		std::cout << "  Ciphertext length: " << hdr.ct_len_ << " bytes" << std::endl;
 		std::cout << "  Signature length: " << hdr.sig_len_ << " bytes" << std::endl;
+		if (!ciphertext.empty()) {
+			std::cout << "  Ciphertext bytes: " << ciphertext.size() << std::endl;
+		}
+		if (!signature.empty()) {
+			std::cout << "  Signature bytes: " << signature.size() << std::endl;
+		}
 	}
 	
 	return offset;

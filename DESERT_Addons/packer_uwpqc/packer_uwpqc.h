@@ -42,8 +42,16 @@
 #include <string>
 #include <cstdint>
 
-#ifdef HAVE_LIBOQS
+#if defined(HAVE_LIBOQS)
 #include <oqs/oqs.h>
+#elif defined(__has_include)
+#  if __has_include(<oqs/oqs.h>)
+#    include <oqs/oqs.h>
+#    define HAVE_LIBOQS 1
+#  endif
+#else
+#include <oqs/oqs.h>
+#define HAVE_LIBOQS 1
 #endif
 
 /**
@@ -64,6 +72,11 @@ struct hdr_uwpqc {
 class packerUWPQC : public packer
 {
 public:
+	enum HandshakeState {
+		HS_IDLE = 0,
+		HS_HELLO_SENT = 1,
+		HS_ESTABLISHED = 2
+	};
 	/**
 	 * Class constructor.
 	 */
@@ -121,6 +134,11 @@ private:
 	std::vector<uint8_t> encapsulate(const std::vector<uint8_t>& plaintext);
 
 	/**
+	 * Encapsulate towards a specific peer public key.
+	 */
+	std::vector<uint8_t> encapsulateWithPublicKey(const std::vector<uint8_t>& peer_public_key);
+
+	/**
 	 * Decapsulate ciphertext using KEM
 	 */
 	std::vector<uint8_t> decapsulate(const std::vector<uint8_t>& ciphertext);
@@ -135,6 +153,35 @@ private:
 	 */
 	bool verify(const std::vector<uint8_t>& message,
 				const std::vector<uint8_t>& signature);
+
+	/**
+	 * Verify a signature using an explicitly supplied public key.
+	 */
+	bool verifyWithPublicKey(const std::vector<uint8_t>& message,
+						 const std::vector<uint8_t>& signature,
+						 const std::vector<uint8_t>& public_key);
+
+	/**
+	 * Build a hello-like handshake message with local public keys.
+	 */
+	std::vector<uint8_t> buildHelloMessage(const std::vector<uint8_t>& challenge);
+
+	/**
+	 * Process a hello message, store the remote public keys, and return a response.
+	 */
+	std::vector<uint8_t> processHelloMessage(const std::vector<uint8_t>& hello_message,
+									  const std::vector<uint8_t>& challenge);
+
+	/**
+	 * Process a response message, verify it, and derive the shared secret.
+	 */
+	std::vector<uint8_t> processResponseMessage(const std::vector<uint8_t>& response_message,
+									 const std::vector<uint8_t>& challenge);
+
+	/**
+	 * Reset the handshake state.
+	 */
+	void resetHandshakeState();
 
 	/**
 	 * Method to transform the headers into a stream of bits
@@ -163,6 +210,15 @@ private:
 	size_t sig_len_bits_;   ///< Number of bits for signature length field
 	int use_kem_;           ///< Flag to enable KEM operations
 	int use_sig_;           ///< Flag to enable signature operations
+	std::vector<uint8_t> shared_secret_;    ///< Shared secret from encapsulation
+	std::vector<uint8_t> peer_kem_public_key_; ///< Peer KEM public key
+	std::vector<uint8_t> peer_sig_public_key_; ///< Peer signature public key
+	std::vector<uint8_t> last_handshake_message_; ///< Last serialized handshake message
+	std::vector<uint8_t> kem_public_key_;   ///< KEM public key
+	std::vector<uint8_t> kem_secret_key_;   ///< KEM secret key
+	std::vector<uint8_t> sig_public_key_;   ///< Signature public key
+	std::vector<uint8_t> sig_secret_key_;   ///< Signature secret key
+	int handshake_state_; ///< Current handshake state
 
 #ifdef HAVE_LIBOQS
 	// liboqs KEM and signature algorithm pointers
@@ -173,12 +229,6 @@ private:
 	std::string pqc_kem_alg_;   ///< Current KEM algorithm name
 	std::string pqc_sig_alg_;   ///< Current signature algorithm name
 
-	// Key material
-	std::vector<uint8_t> kem_public_key_;   ///< KEM public key
-	std::vector<uint8_t> kem_secret_key_;   ///< KEM secret key
-	std::vector<uint8_t> sig_public_key_;   ///< Signature public key
-	std::vector<uint8_t> sig_secret_key_;   ///< Signature secret key
-	std::vector<uint8_t> shared_secret_;    ///< Shared secret from encapsulation
 #endif
 };
 
