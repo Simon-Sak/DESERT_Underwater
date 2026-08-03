@@ -13,7 +13,6 @@ using std::string;
 #include <cstring>
 #include <iostream>
 #include <sstream>
-#include <strings.h>
 
 namespace {
 constexpr uint8_t kProtocolVersion = 1;
@@ -232,6 +231,8 @@ UwPqcAuthModule::startHandshake(uint8_t peer)
 			|| trusted_keys_.find(peer) == trusted_keys_.end() || local_addr_ == 0
 			|| dest_port_ == 0 || dest_addr_ != peer)
 		return false;
+	if (state_ != IDLE && state_ != FAILED)
+		return false;
 	resetSessionSecrets();
 	peer_ = peer;
 	crypto_.random(reinterpret_cast<uint8_t *>(&session_id_), sizeof(session_id_));
@@ -413,6 +414,7 @@ UwPqcAuthModule::handleClientHello(uint8_t sender, uint64_t session_id,
 	if (!verifyPeer(sender, PQC_CLIENT_HELLO, session_id, sender,
 				static_cast<uint8_t>(local_addr_), message, kNonceLength, body)) {
 		++signature_failures_;
+        crypto_.cleanse(body);
 		return fail("invalid client hello signature");
 	}
 	if (state_ == WAIT_CLIENT_FINISH && sender == peer_ && session_id == session_id_) {
@@ -427,6 +429,13 @@ UwPqcAuthModule::handleClientHello(uint8_t sender, uint64_t session_id,
 		++replayed_hellos_;
 		return;
 	}
+    // Simple verification check to drop replayed hello messages within the same timestamp/reassembly mapping
+	for (const auto& kv : seen_session_ids_) {
+	    if (kv.second == session_id) {
+            ++replayed_hellos_;
+            return;
+        }
+    }
 	resetSessionSecrets();
 	peer_ = sender;
 	session_id_ = session_id;
@@ -464,6 +473,7 @@ UwPqcAuthModule::handleServerKey(uint8_t sender, uint64_t session_id,
 	if (!verifyPeer(sender, PQC_SERVER_KEY, session_id, sender,
 				static_cast<uint8_t>(local_addr_), message, body_length, body)) {
 		++signature_failures_;
+        crypto_.cleanse(body);
 		return fail("invalid server key signature");
 	}
 	retransmit_timer_.force_cancel();
@@ -514,6 +524,7 @@ UwPqcAuthModule::handleClientFinish(uint8_t sender, uint64_t session_id,
 	if (!verifyPeer(sender, PQC_CLIENT_FINISH, session_id, sender,
 				static_cast<uint8_t>(local_addr_), message, body_length, body)) {
 		++signature_failures_;
+        crypto_.cleanse(body);
 		return fail("invalid client finish signature");
 	}
 	retransmit_timer_.force_cancel();
@@ -552,8 +563,10 @@ UwPqcAuthModule::handleServerFinish(uint8_t sender, uint64_t session_id,
 	retransmit_timer_.force_cancel();
 	std::vector<uint8_t> expected;
 	bool valid = crypto_.hmac(confirmation_key_, transcript(), expected)
+			&& message.size() == kHmacLength 
 			&& OQS_MEM_secure_bcmp(expected.data(), message.data(), kHmacLength) == 0;
 	crypto_.cleanse(confirmation_key_);
+	crypto_.cleanse(expected);
 	if (!valid)
 		return fail("invalid server confirmation");
 	active_message_.clear();
