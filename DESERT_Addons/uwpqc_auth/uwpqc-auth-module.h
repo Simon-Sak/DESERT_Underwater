@@ -136,6 +136,7 @@ private:
 	std::vector<uint8_t> identity_public_key_;
 	std::vector<uint8_t> identity_secret_key_;
 	std::map<uint8_t, std::vector<uint8_t>> trusted_keys_;
+	std::map<uint8_t, uint64_t> seen_session_ids_;
 	std::vector<uint8_t> kem_secret_key_;
 	std::vector<uint8_t> confirmation_key_;
 	std::vector<uint8_t> client_hello_;
@@ -156,6 +157,7 @@ private:
 	uint64_t retransmissions_;
 	uint64_t signature_failures_;
 	uint64_t malformed_packets_;
+	uint64_t replayed_hellos_;
 	uint64_t handshake_attempts_;
 	uint64_t handshake_successes_;
 	double handshake_elapsed_s_;

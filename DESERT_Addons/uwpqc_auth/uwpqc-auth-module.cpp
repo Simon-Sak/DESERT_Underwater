@@ -126,6 +126,7 @@ UwPqcAuthModule::UwPqcAuthModule()
 	, retransmissions_(0)
 	, signature_failures_(0)
 	, malformed_packets_(0)
+	, replayed_hellos_(0)
 	, handshake_attempts_(0)
 	, handshake_successes_(0)
 	, handshake_elapsed_s_(0.0)
@@ -402,9 +403,16 @@ UwPqcAuthModule::handleClientHello(uint8_t sender, uint64_t session_id,
 	}
 	if (state_ != IDLE && state_ != FAILED)
 		return;
+	auto seen = seen_session_ids_.find(sender);
+	if (seen != seen_session_ids_.end() && seen->second == session_id) {
+		// Drop a replayed hello instead of redoing NTRU/Falcon work for it.
+		++replayed_hellos_;
+		return;
+	}
 	resetSessionSecrets();
 	peer_ = sender;
 	session_id_ = session_id;
+	seen_session_ids_[sender] = session_id;
 	client_hello_ = message;
 	session_timer_.resched(session_timeout_);
 	std::vector<uint8_t> kem_public_key;
@@ -678,6 +686,7 @@ UwPqcAuthModule::stats() const
 		<< " retransmissions " << retransmissions_
 		<< " signature_failures " << signature_failures_
 		<< " malformed_packets " << malformed_packets_
+		<< " replayed_hellos " << replayed_hellos_
 		<< " handshake_attempts " << handshake_attempts_
 		<< " handshake_successes " << handshake_successes_
 		<< " handshake_elapsed_s " << handshake_elapsed_s_;
