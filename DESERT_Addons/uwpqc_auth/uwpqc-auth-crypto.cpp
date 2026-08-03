@@ -5,10 +5,45 @@
 #include <openssl/kdf.h>
 
 #include <algorithm>
+#include <cctype>
 
-UwPqcAuthCrypto::UwPqcAuthCrypto()
-	: kem_(OQS_KEM_new(OQS_KEM_alg_ntru_hrss701))
-	, signature_(OQS_SIG_new(OQS_SIG_alg_falcon_512))
+namespace {
+
+bool startsWithIgnoreCase(const std::string &value, const std::string &prefix)
+{
+	if (value.size() < prefix.size())
+		return false;
+	return std::equal(prefix.begin(), prefix.end(), value.begin(),
+			[](unsigned char a, unsigned char b) {
+				return std::tolower(a) == std::tolower(b);
+			});
+}
+
+} // namespace
+
+bool
+UwPqcAuthCrypto::isSupportedKemAlgorithm(const std::string &name)
+{
+	return startsWithIgnoreCase(name, "ML-KEM-") || startsWithIgnoreCase(name, "HQC-")
+			|| startsWithIgnoreCase(name, "NTRU-");
+}
+
+bool
+UwPqcAuthCrypto::isSupportedSignatureAlgorithm(const std::string &name)
+{
+	return startsWithIgnoreCase(name, "ML-DSA-") || startsWithIgnoreCase(name, "Falcon-")
+			|| startsWithIgnoreCase(name, "SLH");
+}
+
+UwPqcAuthCrypto::UwPqcAuthCrypto(
+		const std::string &kem_algorithm, const std::string &signature_algorithm)
+	: kem_(isSupportedKemAlgorithm(kem_algorithm) ? OQS_KEM_new(kem_algorithm.c_str())
+											 : nullptr)
+	, signature_(isSupportedSignatureAlgorithm(signature_algorithm)
+					? OQS_SIG_new(signature_algorithm.c_str())
+					: nullptr)
+	, kem_algorithm_(kem_ != nullptr ? kem_algorithm : std::string())
+	, signature_algorithm_(signature_ != nullptr ? signature_algorithm : std::string())
 {
 }
 
@@ -22,6 +57,34 @@ bool
 UwPqcAuthCrypto::available() const
 {
 	return kem_ != nullptr && signature_ != nullptr;
+}
+
+bool
+UwPqcAuthCrypto::setKemAlgorithm(const std::string &kem_algorithm)
+{
+	if (!isSupportedKemAlgorithm(kem_algorithm))
+		return false;
+	OQS_KEM *replacement = OQS_KEM_new(kem_algorithm.c_str());
+	if (replacement == nullptr)
+		return false;
+	OQS_KEM_free(kem_);
+	kem_ = replacement;
+	kem_algorithm_ = kem_algorithm;
+	return true;
+}
+
+bool
+UwPqcAuthCrypto::setSignatureAlgorithm(const std::string &signature_algorithm)
+{
+	if (!isSupportedSignatureAlgorithm(signature_algorithm))
+		return false;
+	OQS_SIG *replacement = OQS_SIG_new(signature_algorithm.c_str());
+	if (replacement == nullptr)
+		return false;
+	OQS_SIG_free(signature_);
+	signature_ = replacement;
+	signature_algorithm_ = signature_algorithm;
+	return true;
 }
 
 bool

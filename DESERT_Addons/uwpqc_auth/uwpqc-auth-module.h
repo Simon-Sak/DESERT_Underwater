@@ -145,7 +145,6 @@ private:
 	std::vector<uint8_t> server_finish_;
 	std::vector<uint8_t> active_message_;
 	uint8_t active_type_;
-	uint32_t active_sequence_;
 	Reassembly reassembly_;
 
 	uint64_t tx_packets_;

@@ -10,10 +10,17 @@
 class UwPqcAuthCrypto
 {
 public:
-	UwPqcAuthCrypto();
+	explicit UwPqcAuthCrypto(const std::string &kem_algorithm = "NTRU-HRSS-701",
+			const std::string &signature_algorithm = "Falcon-512");
 	~UwPqcAuthCrypto();
 
 	bool available() const;
+	bool setKemAlgorithm(const std::string &kem_algorithm);
+	bool setSignatureAlgorithm(const std::string &signature_algorithm);
+	const std::string &kemAlgorithm() const { return kem_algorithm_; }
+	const std::string &signatureAlgorithm() const { return signature_algorithm_; }
+	static bool isSupportedKemAlgorithm(const std::string &name);
+	static bool isSupportedSignatureAlgorithm(const std::string &name);
 	bool createIdentity(std::vector<uint8_t> &public_key,
 			std::vector<uint8_t> &secret_key) const;
 	bool sign(const std::vector<uint8_t> &secret_key,
@@ -47,6 +54,8 @@ public:
 private:
 	OQS_KEM *kem_;
 	OQS_SIG *signature_;
+	std::string kem_algorithm_;
+	std::string signature_algorithm_;
 };
 
 #endif

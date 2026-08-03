@@ -116,7 +116,6 @@ UwPqcAuthModule::UwPqcAuthModule()
 	, retransmit_timer_(this)
 	, session_timer_(this)
 	, active_type_(0)
-	, active_sequence_(0)
 	, tx_packets_(0)
 	, rx_packets_(0)
 	, tx_bytes_(0)
@@ -156,7 +155,8 @@ UwPqcAuthModule::command(int argc, const char *const *argv)
 	if (argc == 2) {
 		if (strcasecmp(argv[1], "createIdentity") == 0) {
 			if (!createIdentity()) {
-				tcl.result("unable to create Falcon-512 identity");
+				tcl.resultf("unable to create %s identity",
+						crypto_.signatureAlgorithm().c_str());
 				return TCL_ERROR;
 			}
 			tcl.resultf("%s", crypto_.base64Encode(identity_public_key_).c_str());
@@ -170,9 +170,14 @@ UwPqcAuthModule::command(int argc, const char *const *argv)
 			tcl.resultf("%s", stats().c_str());
 			return TCL_OK;
 		}
+		if (strcasecmp(argv[1], "getAlgorithms") == 0) {
+			tcl.resultf("kem %s signature %s", crypto_.kemAlgorithm().c_str(),
+					crypto_.signatureAlgorithm().c_str());
+			return TCL_OK;
+		}
 	} else if (argc == 4 && strcasecmp(argv[1], "trustPeer") == 0) {
 		if (!trustPeer(static_cast<uint8_t>(atoi(argv[2])), argv[3])) {
-			tcl.result("invalid Falcon-512 peer public key");
+			tcl.resultf("invalid %s peer public key", crypto_.signatureAlgorithm().c_str());
 			return TCL_ERROR;
 		}
 		return TCL_OK;
@@ -181,6 +186,31 @@ UwPqcAuthModule::command(int argc, const char *const *argv)
 			tcl.result("unable to start PQC authentication handshake");
 			return TCL_ERROR;
 		}
+		return TCL_OK;
+	} else if (argc == 3 && strcasecmp(argv[1], "setKemAlgorithm") == 0) {
+		if (state_ != IDLE) {
+			tcl.result("cannot change KEM algorithm while a handshake is active");
+			return TCL_ERROR;
+		}
+		if (!crypto_.setKemAlgorithm(argv[2])) {
+			tcl.result("unsupported KEM algorithm (expected an ML-KEM-*, HQC-*, or NTRU-* identifier)");
+			return TCL_ERROR;
+		}
+		return TCL_OK;
+	} else if (argc == 3 && strcasecmp(argv[1], "setSignatureAlgorithm") == 0) {
+		if (state_ != IDLE) {
+			tcl.result("cannot change signature algorithm while a handshake is active");
+			return TCL_ERROR;
+		}
+		if (!crypto_.setSignatureAlgorithm(argv[2])) {
+			tcl.result("unsupported signature algorithm (expected an ML-DSA-*, "
+					"SLH-DSA*, or Falcon-* identifier)");
+			return TCL_ERROR;
+		}
+		// Stale identity/trusted keys no longer match the new signature algorithm.
+		crypto_.cleanse(identity_secret_key_);
+		identity_public_key_.clear();
+		trusted_keys_.clear();
 		return TCL_OK;
 	}
 	return Module::command(argc, argv);
@@ -303,7 +333,6 @@ UwPqcAuthModule::sendLogical(
 	if (expect_response) {
 		active_message_ = message;
 		active_type_ = type;
-		active_sequence_ = sequence;
 		retry_count_ = 0;
 		retransmit_timer_.resched(retransmit_timeout_ + (count - 1) * kFragmentSpacing);
 	}

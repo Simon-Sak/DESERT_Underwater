@@ -42,8 +42,6 @@ $spectral_mask setBandwidth $opt(bw)
 
 Module/MPhy/BPSK set BitRate_ $opt(bitrate)
 Module/MPhy/BPSK set TxPower_ $opt(txpower)
-Module/UW/PQCAuth set kemAlgorithm_ "NTRU-HRSS-701"
-Module/UW/PQCAuth set signatureAlgorithm_ "Falcon-512"
 Module/UW/PQCAuth set maxFragmentPayload_ $opt(fragment_payload)
 Module/UW/PQCAuth set retransmitTimeout_ 30.0
 Module/UW/PQCAuth set maxRetries_ 3
@@ -55,6 +53,8 @@ proc createNode {index address x_position} {
 
     set node($index) [$ns create-M_Node $tracefile $cltracefile]
     set auth($index) [new Module/UW/PQCAuth]
+    $auth($index) setKemAlgorithm "NTRU-HRSS-701"
+    $auth($index) setSignatureAlgorithm "Falcon-512"
     set udp($index) [new Module/UW/UDP]
     set ipr($index) [new Module/UW/StaticRouting]
     set ipif($index) [new Module/UW/IP]
