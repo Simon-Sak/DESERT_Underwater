@@ -19,13 +19,15 @@ load libMiracleBasicMovement.so
 load libmphy.so
 load libmmac.so
 load libUwmStd.so
-load libuwcsmaaloha.so
+load libuwaloha.so
 load libuwip.so
 load libuwstaticrouting.so
 load libuwmll.so
 load libuwudp.so
 load libuwpqc_auth.so
 
+add-packet-header UWPQC_AUTH
+add-packet-header LL
 set ns [new Simulator]
 $ns use-Miracle
 
@@ -43,7 +45,7 @@ Module/MPhy/BPSK set TxPower_ $opt(txpower)
 Module/UW/PQCAuth set kemAlgorithm_ "NTRU-HRSS-701"
 Module/UW/PQCAuth set signatureAlgorithm_ "Falcon-512"
 Module/UW/PQCAuth set maxFragmentPayload_ $opt(fragment_payload)
-Module/UW/PQCAuth set retransmitTimeout_ 8.0
+Module/UW/PQCAuth set retransmitTimeout_ 30.0
 Module/UW/PQCAuth set maxRetries_ 3
 Module/UW/PQCAuth set sessionTimeout_ 60.0
 
@@ -57,24 +59,24 @@ proc createNode {index address x_position} {
     set ipr($index) [new Module/UW/StaticRouting]
     set ipif($index) [new Module/UW/IP]
     set mll($index) [new Module/UW/MLL]
-    set mac($index) [new Module/UW/CSMA_ALOHA]
+    set mac($index) [new Module/UW/ALOHA]
     set phy($index) [new Module/MPhy/BPSK]
 
-    $node($index) addModule 7 $auth($index) 0 "PQC_AUTH"
-    $node($index) addModule 6 $udp($index) 0 "UDP"
-    $node($index) addModule 5 $ipr($index) 0 "IPR"
-    $node($index) addModule 4 $ipif($index) 0 "IPF"
-    $node($index) addModule 3 $mll($index) 0 "MLL"
-    $node($index) addModule 2 $mac($index) 0 "MAC"
-    $node($index) addModule 1 $phy($index) 0 "PHY"
+    $node($index) addModule 7 $auth($index) 1 "PQC_AUTH"
+    $node($index) addModule 6 $udp($index) 1 "UDP"
+    $node($index) addModule 5 $ipr($index) 1 "IPR"
+    $node($index) addModule 4 $ipif($index) 1 "IPF"
+    $node($index) addModule 3 $mll($index) 1 "MLL"
+    $node($index) addModule 2 $mac($index) 1 "MAC"
+    $node($index) addModule 1 $phy($index) 1 "PHY"
 
     $node($index) setConnection $auth($index) $udp($index) 0
     $node($index) setConnection $udp($index) $ipr($index) 0
-    $node($index) setConnection $ipr($index) $ipif($index) 0
-    $node($index) setConnection $ipif($index) $mll($index) 0
-    $node($index) setConnection $mll($index) $mac($index) 0
-    $node($index) setConnection $mac($index) $phy($index) 0
-    $node($index) addToChannel $channel $phy($index) 0
+    $node($index) setConnection $ipr($index) $ipif($index) 1
+    $node($index) setConnection $ipif($index) $mll($index) 1
+    $node($index) setConnection $mll($index) $mac($index) 1
+    $node($index) setConnection $mac($index) $phy($index) 1
+    $node($index) addToChannel $channel $phy($index) 1
 
     set port($index) [$udp($index) assignPort $auth($index)]
     $ipif($index) addr $address
@@ -101,12 +103,17 @@ createNode 1 2 500.0
 # Bind the two authentication applications to their peer's UDP endpoint.
 $auth(0) set destAddr_ [$ipif(1) addr]
 $auth(0) set destPort_ $port(1)
+$auth(0) set localAddr_ [$ipif(0) addr]
 $auth(1) set destAddr_ [$ipif(0) addr]
 $auth(1) set destPort_ $port(0)
+$auth(1) set localAddr_ [$ipif(1) addr]
 
 # Configure direct IP routes and layer-2 neighbor resolution in both directions.
 $ipr(0) addRoute [$ipif(1) addr] [$ipif(1) addr]
 $ipr(1) addRoute [$ipif(0) addr] [$ipif(0) addr]
+if {[$ipr(0) numroutes] != 1 || [$ipr(1) numroutes] != 1} {
+    error "failed to install direct authentication routes"
+}
 $mll(0) addentry [$ipif(1) addr] [$mac(1) addr]
 $mll(1) addentry [$ipif(0) addr] [$mac(0) addr]
 
