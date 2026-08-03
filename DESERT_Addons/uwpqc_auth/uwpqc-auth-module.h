@@ -29,9 +29,25 @@ private:
 	UwPqcAuthModule *module_;
 };
 
+class UwPqcAuthSessionTimer : public TimerHandler
+{
+public:
+	explicit UwPqcAuthSessionTimer(UwPqcAuthModule *module)
+		: module_(module)
+	{
+	}
+
+protected:
+	void expire(Event *) override;
+
+private:
+	UwPqcAuthModule *module_;
+};
+
 class UwPqcAuthModule : public Module
 {
 	friend class UwPqcAuthRetransmitTimer;
+	friend class UwPqcAuthSessionTimer;
 
 public:
 	UwPqcAuthModule();
@@ -41,6 +57,7 @@ public:
 	void recv(Packet *packet) override;
 
 	void onRetransmitTimeout();
+	void onSessionTimeout();
 
 private:
 	enum State {
@@ -114,6 +131,7 @@ private:
 	int retry_count_;
 	double handshake_started_;
 	UwPqcAuthRetransmitTimer retransmit_timer_;
+	UwPqcAuthSessionTimer session_timer_;
 	UwPqcAuthCrypto crypto_;
 	std::vector<uint8_t> identity_public_key_;
 	std::vector<uint8_t> identity_secret_key_;
@@ -123,6 +141,7 @@ private:
 	std::vector<uint8_t> client_hello_;
 	std::vector<uint8_t> server_key_;
 	std::vector<uint8_t> client_finish_;
+	std::vector<uint8_t> server_finish_;
 	std::vector<uint8_t> active_message_;
 	uint8_t active_type_;
 	uint32_t active_sequence_;
