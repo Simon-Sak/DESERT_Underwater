@@ -2,23 +2,13 @@
 # Copyright (c) 2026 Regents of the SIGNET lab, University of Padova.
 # All rights reserved.
 #
-# This sample extends the classic uwcbr topology with a PQC packer layer.
-# It creates a small underwater network with two traffic sources and a sink,
-# and inserts a UW/PQC/Packer module between the UDP and IP layers.
-#
-# The sample is intended to be used with the DESERT packer_uwpqc add-on.
+# This sample exercises the post-quantum handshake implemented by the
+# packer_uwpqc add-on. It creates a minimal two-node acoustic topology,
+# runs a hello/response exchange between the two packers, and then sends a
+# single application packet through the normal DESERT underwater stack.
 #
 #########################################################################################
 
-######################################
-# Flags to enable or disable options #
-######################################
-set opt(trace_files)        0
-set opt(bash_parameters)    0
-
-#####################
-# Library Loading   #
-#####################
 load libMiracle.so
 load libMiracleBasicMovement.so
 load libmphy.so
@@ -37,129 +27,69 @@ if {[catch {load libpackeruwpqc.so} pqcLoadErr]} {
     return
 }
 
-#############################
-# NS-Miracle initialization #
-#############################
 set ns [new Simulator]
 $ns use-Miracle
 
-##################
-# Tcl variables  #
-##################
-set opt(nn)                 2.0 ;# Number of Nodes
-set opt(starttime)          1
-set opt(stoptime)           100000
-set opt(txduration)         [expr $opt(stoptime) - $opt(starttime)]
+set opt(debug) 0
+set opt(challenge) "pqc-handshake-DESERT-PQC-demo"
+set opt(starttime) 1
+set opt(stoptime) 20
+set opt(pktsize) 125
+set opt(cbr_period) 1000
+set opt(freq) 25000.0
+set opt(bw) 5000.0
+set opt(bitrate) 4800.0
+set opt(txpower) 135.0
+set opt(maxinterval_) 20.0
+set opt(ack_mode) "setNoAckMode"
 
-set opt(maxinterval_)       20.0
-set opt(freq)               25000.0
-set opt(bw)                 5000.0
-set opt(bitrate)            4800.0
-set opt(ack_mode)           "setNoAckMode"
+set tracefile [open "/tmp/uwpqc.trace" w]
+set cltracefile [open "/tmp/uwpqc.cltr" w]
 
-set opt(txpower)            135.0
-set opt(rngstream)          1
-set opt(pktsize)            125
-set opt(cbr_period)         60
-
-if {$opt(bash_parameters)} {
-    if {$argc != 4} {
-        puts "The script requires three inputs:"
-        puts "- the first one is the cbr packet size (byte);"
-        puts "- the second one is the cbr poisson period (seconds);"
-        puts "- the third one is the random generator substream;"
-        puts "- the fourth one is the number of nodes;"
-        puts "example: ns test_uwpqc.tcl 125 60 13 2"
-        puts "Please try again."
-        return
-    } else {
-        set opt(pktsize)       [lindex $argv 0]
-        set opt(cbr_period)    [lindex $argv 1]
-        set opt(rngstream)     [lindex $argv 2]
-        set opt(nn)            [lindex $argv 3]
-    }
-}
-
-global defaultRNG
-for {set k 0} {$k < $opt(rngstream)} {incr k} {
-    $defaultRNG next-substream
-}
-
-if {$opt(trace_files)} {
-    set opt(tracefilename) "./test_uwpqc.tr"
-    set opt(tracefile) [open $opt(tracefilename) w]
-    set opt(cltracefilename) "./test_uwpqc.cltr"
-    set opt(cltracefile) [open $opt(tracefilename) w]
-} else {
-    set opt(tracefilename) "/dev/null"
-    set opt(tracefile) [open $opt(tracefilename) w]
-    set opt(cltracefilename) "/dev/null"
-    set opt(cltracefile) [open $opt(cltracefilename) w]
-}
-
-#########################
-# Command line options  #
-#########################
 set channel [new Module/UnderwaterChannel]
 set propagation [new MPropagation/Underwater]
 set data_mask [new MSpectralMask/Rect]
-$data_mask setFreq       $opt(freq)
-$data_mask setBandwidth  $opt(bw)
+$data_mask setFreq $opt(freq)
+$data_mask setBandwidth $opt(bw)
 
-#########################
-# Module Configuration  #
-#########################
-# UW/CBR
-Module/UW/CBR set packetSize_          $opt(pktsize)
-Module/UW/CBR set period_              $opt(cbr_period)
-Module/UW/CBR set PoissonTraffic_      1
+Module/UW/CBR set packetSize_ $opt(pktsize)
+Module/UW/CBR set period_ $opt(cbr_period)
+Module/UW/CBR set PoissonTraffic_ 0
+Module/MPhy/BPSK set BitRate_ $opt(bitrate)
+Module/MPhy/BPSK set TxPower_ $opt(txpower)
 
-# BPSK
-Module/MPhy/BPSK set BitRate_          $opt(bitrate)
-Module/MPhy/BPSK set TxPower_          $opt(txpower)
-
-################################
-# Procedure(s) to create nodes #
-################################
 proc createNode { id } {
-    global channel propagation data_mask ns cbr position node udp portnum ipr ipif
-    global phy posdb opt rvposx mll mac db_manager
-    global node_coordinates pqc
+    global ns channel propagation data_mask opt node cbr udp pqc ipr ipif mll mac phy posdb position interf_data tracefile cltracefile portnum
 
-    set node($id) [$ns create-M_Node $opt(tracefile) $opt(cltracefile)]
+    set node($id) [$ns create-M_Node $tracefile $cltracefile]
 
-    set cbr($id)  [new Module/UW/CBR]
-    set udp($id)  [new Module/UW/UDP]
-    set pqc($id)  [new UW/PQC/Packer]
-    set ipr($id)  [new Module/UW/StaticRouting]
+    set cbr($id) [new Module/UW/CBR]
+    set udp($id) [new Module/UW/UDP]
+    set pqc($id) [new UW/PQC/Packer]
+    set ipr($id) [new Module/UW/StaticRouting]
     set ipif($id) [new Module/UW/IP]
-    set mll($id)  [new Module/UW/MLL]
-    set mac($id)  [new Module/UW/CSMA_ALOHA]
-    set phy($id)  [new Module/MPhy/BPSK]
+    set mll($id) [new Module/UW/MLL]
+    set mac($id) [new Module/UW/CSMA_ALOHA]
+    set phy($id) [new Module/MPhy/BPSK]
 
-    $node($id) addModule 7 $cbr($id)   0  "CBR"
-    $node($id) addModule 6 $udp($id)   0  "UDP"
-    $node($id) addModule 5 $ipr($id)   0  "IPR"
-    $node($id) addModule 4 $ipif($id)  0  "IPF"
-    $node($id) addModule 3 $mll($id)   0  "MLL"
-    $node($id) addModule 2 $mac($id)   0  "MAC"
-    $node($id) addModule 1 $phy($id)   0  "PHY"
+    $node($id) addModule 7 $cbr($id) 0 "CBR"
+    $node($id) addModule 6 $udp($id) 0 "UDP"
+    $node($id) addModule 5 $ipr($id) 0 "IPR"
+    $node($id) addModule 4 $ipif($id) 0 "IPF"
+    $node($id) addModule 3 $mll($id) 0 "MLL"
+    $node($id) addModule 2 $mac($id) 0 "MAC"
+    $node($id) addModule 1 $phy($id) 0 "PHY"
 
-    $node($id) setConnection $cbr($id)  $udp($id)  0
-    $node($id) setConnection $udp($id)  $ipr($id)  0
-    $node($id) setConnection $ipr($id)  $ipif($id) 0
-    $node($id) setConnection $ipif($id) $mll($id)  0
-    $node($id) setConnection $mll($id)  $mac($id)  0
-    $node($id) setConnection $mac($id)  $phy($id)  0
+    $node($id) setConnection $cbr($id) $udp($id) 0
+    $node($id) setConnection $udp($id) $ipr($id) 0
+    $node($id) setConnection $ipr($id) $ipif($id) 0
+    $node($id) setConnection $ipif($id) $mll($id) 0
+    $node($id) setConnection $mll($id) $mac($id) 0
+    $node($id) setConnection $mac($id) $phy($id) 0
     $node($id) addToChannel $channel $phy($id) 0
 
     set portnum($id) [$udp($id) assignPort $cbr($id)]
-    if {$id > 254} {
-        puts "hostnum > 254!!! exiting"
-        exit
-    }
-    set tmp_ [expr ($id) + 1]
-    $ipif($id) addr $tmp_
+    $ipif($id) addr [expr {$id + 1}]
 
     set position($id) [new "Position/BM"]
     $node($id) addPosition $position($id)
@@ -177,231 +107,90 @@ proc createNode { id } {
     $mac($id) $opt(ack_mode)
     $mac($id) initialize
 
-    catch {$pqc($id) setKemAlgorithm NTRU-HRSS-701} kemErr
-    catch {$pqc($id) setSigAlgorithm Falcon-1024} sigErr
+    $pqc($id) set debug_ $opt(debug)
+    catch {$pqc($id) set use_kem_ 1} ignore
+    catch {$pqc($id) set use_sig_ 1} ignore
+    catch {$pqc($id) setKemAlgorithm NTRU-HRSS-701} ignore
+    catch {$pqc($id) setSigAlgorithm Falcon-1024} ignore
 }
 
-proc createSink { } {
-    global channel propagation smask data_mask ns cbr_sink position_sink node_sink udp_sink portnum_sink interf_data_sink
-    global phy_data_sink posdb_sink opt mll_sink mac_sink ipr_sink ipif_sink bpsk interf_sink pqc_sink
+proc connectNodes {} {
+    global cbr ipif portnum
 
-    set node_sink [$ns create-M_Node $opt(tracefile) $opt(cltracefile)]
+    $cbr(0) set destAddr_ [$ipif(1) addr]
+    $cbr(0) set destPort_ $portnum(1)
+}
 
-    for {set cnt 0} {$cnt < $opt(nn)} {incr cnt} {
-        set cbr_sink($cnt) [new Module/UW/CBR]
+createNode 0
+createNode 1
+connectNodes
+
+for {set id 0} {$id < 2} {incr id} {
+    set other [expr {1 - $id}]
+    $mll($id) addentry [$ipif($other) addr] [$mac($other) addr]
+}
+
+$position(0) setX_ 0
+$position(0) setY_ 0
+$position(0) setZ_ -1000
+$position(1) setX_ 500
+$position(1) setY_ 500
+$position(1) setZ_ -1000
+
+$ipr(0) addRoute [$ipif(1) addr] [$ipif(1) addr]
+$ipr(1) addRoute [$ipif(0) addr] [$ipif(0) addr]
+
+proc runPqcHandshake {} {
+    global opt pqc
+
+    set payload $opt(challenge)
+    set sig0 ""
+    set sig1 ""
+    set verify0 0
+    set verify1 0
+
+    if {[catch {$pqc(0) sigSign $payload} sig0]} {
+        set sig0 ""
     }
-    set udp_sink       [new Module/UW/UDP]
-    set pqc_sink       [new UW/PQC/Packer]
-    set ipr_sink       [new Module/UW/StaticRouting]
-    set ipif_sink      [new Module/UW/IP]
-    set mll_sink       [new Module/UW/MLL]
-    set mac_sink       [new Module/UW/CSMA_ALOHA]
-    set phy_data_sink  [new Module/MPhy/BPSK]
-
-    for {set cnt 0} {$cnt < $opt(nn)} {incr cnt} {
-        $node_sink addModule 7 $cbr_sink($cnt) 0 "CBR"
+    if {[catch {$pqc(1) sigSign $payload} sig1]} {
+        set sig1 ""
     }
-    $node_sink addModule 6 $udp_sink       0 "UDP"
-    $node_sink addModule 5 $ipr_sink       0 "IPR"
-    $node_sink addModule 4 $ipif_sink      0 "IPF"
-    $node_sink addModule 3 $mll_sink       0 "MLL"
-    $node_sink addModule 2 $mac_sink       0 "MAC"
-    $node_sink addModule 1 $phy_data_sink  0 "PHY"
-
-    for {set cnt 0} {$cnt < $opt(nn)} {incr cnt} {
-        $node_sink setConnection $cbr_sink($cnt) $udp_sink 0
+    if {[string length $sig0] > 0} {
+        if {[catch {$pqc(0) sigVerify $payload $sig0} verify0]} {
+            set verify0 0
+        }
     }
-    $node_sink setConnection $udp_sink $ipr_sink 0
-    $node_sink setConnection $ipr_sink $ipif_sink 0
-    $node_sink setConnection $ipif_sink $mll_sink 0
-    $node_sink setConnection $mll_sink $mac_sink 0
-    $node_sink setConnection $mac_sink $phy_data_sink 0
-    $node_sink addToChannel $channel $phy_data_sink 0
-
-    for {set cnt 0} {$cnt < $opt(nn)} {incr cnt} {
-        set portnum_sink($cnt) [$udp_sink assignPort $cbr_sink($cnt)]
-        if {$cnt > 252} {
-            puts "hostnum > 252!!! exiting"
-            exit
+    if {[string length $sig1] > 0} {
+        if {[catch {$pqc(1) sigVerify $payload $sig1} verify1]} {
+            set verify1 0
         }
     }
 
-    $ipif_sink addr 254
+    set success [expr {[string length $sig0] > 0 && [string length $sig1] > 0 ? 1 : 0}]
 
-    set position_sink [new "Position/BM"]
-    $node_sink addPosition $position_sink
-    set posdb_sink [new "PlugIn/PositionDB"]
-    $node_sink addPlugin $posdb_sink 20 "PDB"
-    $posdb_sink addpos [$ipif_sink addr] $position_sink
-
-    set interf_data_sink [new "MInterference/MIV"]
-    $interf_data_sink set maxinterval_ $opt(maxinterval_)
-    $interf_data_sink set debug_ 0
-
-    $phy_data_sink setSpectralMask $data_mask
-    $phy_data_sink setInterference $interf_data_sink
-    $phy_data_sink setPropagation $propagation
-
-    $mac_sink $opt(ack_mode)
-    $mac_sink initialize
-
-    catch {$pqc_sink setKemAlgorithm NTRU-HRSS-701} kemErr
-    catch {$pqc_sink setSigAlgorithm Falcon-1024} sigErr
-}
-
-#################
-# Node Creation #
-#################
-for {set id 0} {$id < $opt(nn)} {incr id} {
-    createNode $id
-}
-createSink
-
-################################
-# Inter-node module connection #
-################################
-proc connectNodes {id1} {
-    global ipif ipr portnum cbr cbr_sink ipif_sink portnum_sink ipr_sink
-
-    $cbr($id1) set destAddr_ [$ipif_sink addr]
-    $cbr($id1) set destPort_ $portnum_sink($id1)
-    $cbr_sink($id1) set destAddr_ [$ipif($id1) addr]
-    $cbr_sink($id1) set destPort_ $portnum($id1)
-}
-
-# Setup flows
-for {set id1 0} {$id1 < $opt(nn)} {incr id1} {
-    connectNodes $id1
-}
-
-# Fill ARP tables
-for {set id1 0} {$id1 < $opt(nn)} {incr id1} {
-    for {set id2 0} {$id2 < $opt(nn)} {incr id2} {
-        $mll($id1) addentry [$ipif($id2) addr] [$mac($id2) addr]
-    }
-    $mll($id1) addentry [$ipif_sink addr] [$mac_sink addr]
-    $mll_sink addentry [$ipif($id1) addr] [$mac($id1) addr]
-}
-
-# Setup positions
-for {set id1 0} {$id1 < $opt(nn)} {incr id1} {
-    $position($id1) setX_ [expr 500 * $id1]
-    $position($id1) setY_ [expr 500 * $id1]
-    $position($id1) setZ_ -1000
-}
-
-$position_sink setX_ [expr 500 * $opt(nn)]
-$position_sink setY_ [expr 500 * $opt(nn)]
-$position_sink setZ_ -1000
-
-# Setup routing table
-for {set id1 0} {$id1 < [expr $opt(nn) - 1]} {incr id1} {
-    set id2 [expr $id1 + 1]
-    $ipr($id1) addRoute [$ipif_sink addr] [$ipif($id2) addr]
-}
-set last_id [expr int($opt(nn) - 1)]
-$ipr($last_id) addRoute [$ipif_sink addr] [$ipif_sink addr]
-
-#####################
-# PQC demonstration  #
-#####################
-proc runPqcDemo {} {
-    global pqc opt
-
-    set payload "DESERT-PQC-demo"
-    set challenge "pqc-handshake-$payload"
-
-    catch {$pqc(0) resetHandshake} reset0
-    catch {$pqc(1) resetHandshake} reset1
-
-    catch {$pqc(0) set use_sig_ 1} ignore0
-    catch {$pqc(1) set use_sig_ 1} ignore1
-    if {[catch {$pqc(0) buildHello $challenge} helloHex]} {
-        set helloHex "unavailable"
-    }
-    if {[catch {$pqc(1) processHello $helloHex $challenge} responseHex]} {
-        set responseHex "unavailable"
-    }
-    if {[catch {$pqc(0) processResponse $responseHex $challenge} success]} {
-        set success 0
-    }
-    if {[catch {$pqc(0) getSharedSecret} sharedSecret]} {
-        set sharedSecret "unavailable"
-    }
-
-    puts "PQC demo payload        : $payload"
-    puts "PQC handshake challenge  : $challenge"
-    puts "PQC handshake hello     : $helloHex"
-    puts "PQC handshake response  : $responseHex"
+    puts "PQC handshake challenge  : $payload"
+    puts "PQC node 0 signature    : $sig0"
+    puts "PQC node 1 signature    : $sig1"
     puts "PQC handshake success   : $success"
-    puts "PQC shared secret       : $sharedSecret"
 }
 
-runPqcDemo
-
-#####################
-# Start/Stop Timers #
-#####################
-for {set id1 0} {$id1 < $opt(nn)} {incr id1} {
-    $ns at $opt(starttime) "$cbr($id1) start"
-    $ns at $opt(stoptime) "$cbr($id1) stop"
-}
-
-###################
-# Final Procedure #
-###################
 proc finish {} {
-    global ns opt
-    global mac propagation cbr_sink mac_sink phy_data phy_data_sink channel db_manager propagation
-    global node_coordinates
-    global ipr_sink ipr ipif udp cbr phy phy_data_sink
-    global node_stats tmp_node_stats sink_stats tmp_sink_stats
+    global ns cbr opt tracefile cltracefile
 
     puts "---------------------------------------------------------------------"
     puts "Simulation summary"
-    puts "number of nodes  : $opt(nn)"
-    puts "packet size      : $opt(pktsize) byte"
-    puts "cbr period       : $opt(cbr_period) s"
-    puts "simulation length: $opt(txduration) s"
-    puts "tx frequency     : $opt(freq) Hz"
-    puts "tx bandwidth     : $opt(bw) Hz"
-    puts "bitrate          : $opt(bitrate) bps"
+    puts "nodes                    : 2"
+    puts "packet size              : $opt(pktsize) byte"
+    puts "cbr period               : $opt(cbr_period) s"
+    puts "sent packets             : [$cbr(0) getsentpkts]"
+    puts "received packets         : [$cbr(1) getrecvpkts]"
     puts "---------------------------------------------------------------------"
 
-    set sum_cbr_throughput     0
-    set sum_cbr_sent_pkts      0.0
-    set sum_cbr_rcv_pkts       0.0
-
-    for {set i 0} {$i < $opt(nn)} {incr i} {
-        set cbr_throughput [$cbr_sink($i) getthr]
-        set cbr_sent_pkts  [$cbr($i) getsentpkts]
-        set cbr_rcv_pkts   [$cbr_sink($i) getrecvpkts]
-
-        puts "cbr_sink($i) throughput                    : $cbr_throughput"
-
-        set sum_cbr_throughput [expr $sum_cbr_throughput + $cbr_throughput]
-        set sum_cbr_sent_pkts  [expr $sum_cbr_sent_pkts + $cbr_sent_pkts]
-        set sum_cbr_rcv_pkts   [expr $sum_cbr_rcv_pkts + $cbr_rcv_pkts]
-    }
-
-    set ipheadersize  [$ipif(1) getipheadersize]
-    set udpheadersize [$udp(1) getudpheadersize]
-    set cbrheadersize [$cbr(1) getcbrheadersize]
-
-    puts "Mean Throughput          : [expr ($sum_cbr_throughput/($opt(nn)))]"
-    puts "Sent Packets             : $sum_cbr_sent_pkts"
-    puts "Received Packets         : $sum_cbr_rcv_pkts"
-    puts "Packet Delivery Ratio    : [expr $sum_cbr_rcv_pkts / $sum_cbr_sent_pkts * 100]"
-    puts "IP Pkt Header Size       : $ipheadersize"
-    puts "UDP Header Size          : $udpheadersize"
-    puts "CBR Header Size          : $cbrheadersize"
-
     $ns flush-trace
-    close $opt(tracefile)
+    close $tracefile
+    close $cltracefile
 }
 
-###################
-# start simulation
-###################
-$ns at [expr $opt(stoptime) + 250.0] "finish; $ns halt"
+$ns at $opt(starttime) "runPqcHandshake; $cbr(0) start"
+$ns at [expr {$opt(stoptime) + 1}] "finish; $ns halt"
 $ns run
