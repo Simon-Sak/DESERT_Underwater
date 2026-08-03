@@ -1,7 +1,7 @@
 # Parameterized variant of test_uwpqc_ntru_falcon_handshake.tcl used to sweep
 # KEM/signature algorithm combinations. Usage:
 #   ns test_uwpqc_algo_matrix.tcl <kemAlgorithm> <signatureAlgorithm>
-# Defaults to NTRU-HRSS-701 / Falcon-512 when no arguments are given.
+# Defaults to NTRU-HPS-2048-509 / Falcon-512 when no arguments are given.
 # Prints a single "RESULT|..." line that a driver script can parse.
 
 set opt(starttime) 5.0
@@ -15,7 +15,7 @@ set opt(txpower) 135.0
 set opt(maxinterval) 20.0
 set opt(fragment_payload) 96
 
-if {$argc >= 1} { set opt(kem) [lindex $argv 0] } else { set opt(kem) "NTRU-HRSS-701" }
+if {$argc >= 1} { set opt(kem) [lindex $argv 0] } else { set opt(kem) "NTRU-HPS-2048-509" }
 if {$argc >= 2} { set opt(sig) [lindex $argv 1] } else { set opt(sig) "Falcon-512" }
 
 load libMiracle.so

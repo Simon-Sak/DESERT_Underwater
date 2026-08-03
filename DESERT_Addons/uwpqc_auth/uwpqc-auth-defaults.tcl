@@ -8,6 +8,6 @@ Module/UW/PQCAuth set maxFragmentPayload_ 96
 Module/UW/PQCAuth set retransmitTimeout_ 8.0
 Module/UW/PQCAuth set maxRetries_ 3
 
-# KEM and signature algorithms default to NTRU-HRSS-701 and Falcon-512 in the
+# KEM and signature algorithms default to NTRU-HPS-2048-509 and Falcon-512 in the
 # module's C++ constructor; use the per-instance "setKemAlgorithm" /
 # "setSignatureAlgorithm" commands to switch to ML-KEM/HQC or ML-DSA/SLH-DSA.

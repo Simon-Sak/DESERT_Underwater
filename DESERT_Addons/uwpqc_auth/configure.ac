@@ -67,10 +67,10 @@ CPPFLAGS="$CPPFLAGS -I$oqs_prefix/include"
 LIBS="$LIBS -L$oqs_prefix/lib -loqs -lcrypto"
 AC_LINK_IFELSE([
   AC_LANG_PROGRAM([[#include <oqs/oqs.h>]],
-    [[OQS_KEM *kem = OQS_KEM_new(OQS_KEM_alg_ntru_hrss701);
+    [[OQS_KEM *kem = OQS_KEM_new(OQS_KEM_alg_ntru_hps2048509);
       OQS_SIG *sig = OQS_SIG_new(OQS_SIG_alg_falcon_512);
       OQS_KEM_free(kem); OQS_SIG_free(sig);]])], [],
-  [AC_MSG_ERROR([NTRU-HRSS-701 and Falcon-512 liboqs support is required])])
+  [AC_MSG_ERROR([NTRU-HPS-2048-509 and Falcon-512 liboqs support is required])])
 CPPFLAGS="$saved_CPPFLAGS"
 LIBS="$saved_LIBS"
 

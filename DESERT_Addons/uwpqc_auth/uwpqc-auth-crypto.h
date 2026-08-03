@@ -10,7 +10,7 @@
 class UwPqcAuthCrypto
 {
 public:
-	explicit UwPqcAuthCrypto(const std::string &kem_algorithm = "NTRU-HRSS-701",
+	explicit UwPqcAuthCrypto(const std::string &kem_algorithm = "NTRU-HPS-2048-509",
 			const std::string &signature_algorithm = "Falcon-512");
 	~UwPqcAuthCrypto();
 

@@ -52,7 +52,7 @@ proc createNode {index address x_position} {
 
     set node($index) [$ns create-M_Node $tracefile $cltracefile]
     set auth($index) [new Module/UW/PQCAuth]
-    $auth($index) setKemAlgorithm "NTRU-HRSS-701"
+    $auth($index) setKemAlgorithm "NTRU-HPS-2048-509"
     $auth($index) setSignatureAlgorithm "Falcon-512"
     set udp($index) [new Module/UW/UDP]
     set ipr($index) [new Module/UW/StaticRouting]
@@ -139,7 +139,7 @@ proc finish {} {
     global ns auth tracefile cltracefile
 
     puts "----------------------------------------"
-    puts "NTRU-HRSS-701 + Falcon-512 handshake statistics"
+    puts "NTRU-HPS-2048-509 + Falcon-512 handshake statistics"
     printNodeStats 0
     printNodeStats 1
 
