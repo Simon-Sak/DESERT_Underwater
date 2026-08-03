@@ -190,9 +190,12 @@ packerUWPQC::command(int argc, const char *const *argv)
 		std::vector<uint8_t> challenge(argv[2], argv[2] + strlen(argv[2]));
 		std::vector<uint8_t> hello = buildHelloMessage(challenge);
 		if (hello.empty()) {
+			std::cerr << "UWPQC: buildHello returned empty vector" << std::endl;
 			return TCL_ERROR;
 		}
-		Tcl::instance().result(bytesToHex(hello).c_str());
+		std::string hex_result = bytesToHex(hello);
+		std::cerr << "UWPQC: buildHello returning " << hello.size() << " bytes, hex string length=" << hex_result.length() << std::endl;
+		Tcl::instance().result(hex_result.c_str());
 		return TCL_OK;
 #else
 		return TCL_ERROR;
@@ -681,15 +684,27 @@ packerUWPQC::buildHelloMessage(const std::vector<uint8_t>& challenge)
 
 	std::vector<uint8_t> payload;
 	payload.push_back(0x01);
+	std::cerr << "UWPQC buildHello: payload after type byte = " << payload.size() << std::endl;
+	
 	appendLengthPrefixedBytes(payload, challenge);
+	std::cerr << "UWPQC buildHello: payload after challenge = " << payload.size() << std::endl;
+	
 	appendLengthPrefixedBytes(payload, kem_public_key_);
+	std::cerr << "UWPQC buildHello: payload after kem_pub = " << payload.size() << std::endl;
+	
 	appendLengthPrefixedBytes(payload, sig_public_key_);
+	std::cerr << "UWPQC buildHello: payload after sig_pub = " << payload.size() << std::endl;
 
 	std::vector<uint8_t> signature = sign(payload);
 	if (signature.empty()) {
+		std::cerr << "UWPQC buildHello: sign() returned empty" << std::endl;
 		return std::vector<uint8_t>();
 	}
+	std::cerr << "UWPQC buildHello: signature size = " << signature.size() << std::endl;
+	
 	appendLengthPrefixedBytes(payload, signature);
+	std::cerr << "UWPQC buildHello: final payload size = " << payload.size() << std::endl;
+	
 	last_handshake_message_ = payload;
 	handshake_state_ = HS_HELLO_SENT;
 	return payload;
