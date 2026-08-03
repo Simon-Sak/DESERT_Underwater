@@ -142,6 +142,39 @@ UWPQC::command(int argc, const char *const *argv)
 		return TCL_ERROR;
 #endif
 	}
+	else if (argc == 2 && strcmp(argv[1], "getKemPublicKey") == 0) {
+#ifdef HAVE_LIBOQS
+		Tcl::instance().result(bytesToHex(kem_public_key_).c_str());
+		return TCL_OK;
+#else
+		return TCL_ERROR;
+#endif
+	}
+	else if (argc == 2 && strcmp(argv[1], "getSigPublicKey") == 0) {
+#ifdef HAVE_LIBOQS
+		Tcl::instance().result(bytesToHex(sig_public_key_).c_str());
+		return TCL_OK;
+#else
+		return TCL_ERROR;
+#endif
+	}
+	else if (argc == 4 && strcmp(argv[1], "encapsulateWithPeer") == 0) {
+#ifdef HAVE_LIBOQS
+		std::vector<uint8_t> peer;
+		if (!hexToBytes(argv[2], peer)) {
+			return TCL_ERROR;
+		}
+		std::vector<uint8_t> plaintext(argv[3], argv[3] + strlen(argv[3]));
+		std::vector<uint8_t> ciphertext = encapsulateWithPublicKey(peer);
+		if (ciphertext.empty()) {
+			return TCL_ERROR;
+		}
+		Tcl::instance().result(bytesToHex(ciphertext).c_str());
+		return TCL_OK;
+#else
+		return TCL_ERROR;
+#endif
+	}
 	else if (argc == 3 && strcmp(argv[1], "kemDecapsulate") == 0) {
 #ifdef HAVE_LIBOQS
 		std::vector<uint8_t> ciphertext;

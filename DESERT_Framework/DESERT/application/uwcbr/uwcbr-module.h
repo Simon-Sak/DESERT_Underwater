@@ -49,6 +49,8 @@
 #include <module.h>
 #include <uwip-module.h>
 #include <uwudp-module.h>
+#include <vector>
+#include <vector>
 
 #define UWCBR_DROP_REASON_UNKNOWN_TYPE \
 	"UKT" /**< Reason for a drop in a <i>UWCBR</i> module. */
@@ -300,6 +302,9 @@ protected:
 
 	double period_; /**< Period between two consecutive packet transmissions. */
 	int pktSize_; /**< <i>UWCBR</i> packets payload size. */
+
+	/* Outgoing application payload prepared by TCL (raw bytes) */
+	std::vector<uint8_t> outgoing_payload_; /**< Holds next outgoing app payload */
 
 	/* Cumulative statistics */
 	double sumrtt; /**< Sum of RTT samples. */

@@ -38,13 +38,46 @@
  */
 
 #include "uwcbr-module.h"
+#include "../uwApplication/uwApplication_cmn_header.h"
 
 #include <iostream>
 #include <rng.h>
 #include <stdint.h>
 #include <string>
+#include <utility>
+#include <vector>
 
 extern packet_t PT_UWCBR;
+
+/* Helper: convert hex char to nibble */
+static inline int hexCharToNibble(char c)
+{
+	if (c >= '0' && c <= '9')
+		return c - '0';
+	if (c >= 'a' && c <= 'f')
+		return 10 + (c - 'a');
+	if (c >= 'A' && c <= 'F')
+		return 10 + (c - 'A');
+	return -1;
+}
+
+/* Helper: parse hex string into bytes. Returns true on success */
+static bool hexToBytes(const std::string &hex, std::vector<uint8_t> &out)
+{
+	out.clear();
+	size_t len = hex.size();
+	if (len % 2 != 0)
+		return false;
+	out.reserve(len / 2);
+	for (size_t i = 0; i < len; i += 2) {
+		int hi = hexCharToNibble(hex[i]);
+		int lo = hexCharToNibble(hex[i + 1]);
+		if (hi < 0 || lo < 0)
+			return false;
+		out.push_back((uint8_t)((hi << 4) | lo));
+	}
+	return true;
+}
 
 int hdr_uwcbr::offset_; /**< Offset used to access in <i>hdr_uwcbr</i> packets
 						   header. */
@@ -215,6 +248,17 @@ UwCbrModule::command(int argc, const char *const *argv)
 						std::ios_base::out | std::ios_base::app);
 			}
 			return TCL_OK;
+		} else if (strcasecmp(argv[1], "setOutgoingAppPayloadHex") == 0) {
+			// argv[2] contains hex string representing raw payload bytes
+			std::string hex((char *) argv[2]);
+			std::vector<uint8_t> tmp;
+			if (!hexToBytes(hex, tmp)) {
+				tcl.resultf("%s", "Invalid hex string");
+				return TCL_ERROR;
+			}
+			// store into outgoing payload buffer
+			outgoing_payload_ = std::move(tmp);
+			return TCL_OK;
 		}
 	} else if (argc == 4) {
 		if (strcasecmp(argv[1], "setLogSuffix") == 0) {
@@ -283,6 +327,27 @@ UwCbrModule::sendPkt()
 			"sendPkt()::send a packet (" + to_string(ch->uid()) +
 					") with sn: " + to_string(uwcbrh->sn()));
 
+	// If an outgoing application payload was prepared via TCL, embed it
+	if (!outgoing_payload_.empty()) {
+		// Set packet size to payload length
+		hdr_cmn *ch = hdr_cmn::access(p);
+		ch->size() = static_cast<int>(outgoing_payload_.size());
+
+		// Fill application header payload if available
+		// Note: HDR_DATA_APPLICATION must be accessible (uwApplication header)
+		hdr_DATA_APPLICATION *applh = HDR_DATA_APPLICATION(p);
+		int payload_len = static_cast<int>(outgoing_payload_.size());
+		if (payload_len > MAX_LENGTH_PAYLOAD)
+			payload_len = MAX_LENGTH_PAYLOAD;
+		for (int i = 0; i < payload_len; i++) {
+			applh->payload_msg[i] = static_cast<char>(outgoing_payload_[i]);
+		}
+		applh->payload_size() = payload_len;
+
+		// Clear buffer after use
+		outgoing_payload_.clear();
+	}
+
 	sendDown(p, delay);
 }
 
@@ -299,7 +364,7 @@ UwCbrModule::sendPktLowPriority()
 	printOnLog(Logger::LogLevel::DEBUG,
 			"UWCBR",
 			"sendPktLowPriority()::send a packet (" + to_string(ch->uid()) +
-					") with sn: " + to_string(uwcbrh->sn()));
+				") with sn: " + to_string(uwcbrh->sn()));
 
 	sendDown(p, delay);
 }

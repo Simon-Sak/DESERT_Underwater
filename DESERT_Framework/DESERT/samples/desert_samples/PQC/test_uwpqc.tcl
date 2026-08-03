@@ -19,6 +19,7 @@ load libuwstaticrouting.so
 load libuwmll.so
 load libuwudp.so
 load libuwcbr.so
+load libuwapplication.so
 
 if {[catch {load libuwpqc.so} pqcLoadErr]} {
     puts "Unable to load libuwpqc.so: $pqcLoadErr"
@@ -175,6 +176,61 @@ proc runPqcHandshake {} {
     }
 }
 
+proc sendEncapsulatedAppData {} {
+    global pqc opt ns cbr
+
+    puts "\n=== Encapsulated Application Data Demo ==="
+
+    set appmsg "DESERT application payload example"
+    puts "Application message: $appmsg"
+
+    # Exchange public keys and encapsulate across nodes (simulated network exchange)
+    set pub0 [$pqc(0) getKemPublicKey]
+    if {$pub0 eq {}} {
+        puts "Node0: cannot retrieve KEM public key"
+    } else {
+        puts "Node0: KEM public key (hex len=[string length $pub0])"
+    }
+
+    # Node1 encapsulates the application message using Node0's public key
+    set cipherHex [$pqc(1) encapsulateWithPeer $pub0 $appmsg]
+    if {$cipherHex eq {}} {
+        puts "Node1: encapsulation failed or liboqs unavailable"
+    } else {
+        puts "Node1: encapsulated app data (hex len=[string length $cipherHex])"
+        puts "  ciphertext (hex): $cipherHex"
+    }
+
+    # Simulate sending ciphertext via CBR (scheduling a CBR transmission)
+    puts "Node1: embedding ciphertext into CBR payload and sending packet"
+    catch {$cbr(1) setOutgoingAppPayloadHex $cipherHex} ignore
+    $ns at 5.0 "$cbr(1) sendPkt"
+
+    # Node0 decapsulates the received ciphertext (simulated receive)
+    if {$cipherHex ne {}} {
+        set sharedHex [$pqc(0) kemDecapsulate $cipherHex]
+        if {$sharedHex eq {}} {
+            puts "Node0: kemDecapsulate failed"
+        } else {
+            puts "Node0: decapsulated shared secret (hex len=[string length $sharedHex])"
+            puts "  shared secret (hex): $sharedHex"
+        }
+    }
+
+    # Demonstrate signature creation and verification (local on node0)
+    set sigHex [$pqc(0) sigSign $appmsg]
+    if {$sigHex eq {}} {
+        puts "Node0: sigSign failed or liboqs unavailable"
+    } else {
+        puts "Node0: signature (hex len=[string length $sigHex])"
+        puts "  signature (hex): $sigHex"
+        set verifyRes [$pqc(0) sigVerify $appmsg $sigHex]
+        puts "Node0: sigVerify (self) -> $verifyRes"
+    }
+
+    puts "=== End Encapsulated Application Data Demo ===\n"
+}
+
 proc finish {} {
     global ns cbr opt tracefile cltracefile node_pkt_counter
 
@@ -206,5 +262,7 @@ proc finish {} {
 }
 
 $ns at $opt(starttime) "runPqcHandshake"
+# Schedule encapsulated application-data demo shortly after handshake packets
+$ns at 4.5 "sendEncapsulatedAppData"
 $ns at [expr {$opt(stoptime) + 1}] "finish; $ns halt"
 $ns run
