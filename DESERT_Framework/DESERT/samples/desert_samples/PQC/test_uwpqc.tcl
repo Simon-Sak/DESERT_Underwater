@@ -147,7 +147,7 @@ proc runPqcHandshake {} {
     global ns cbr opt node_pkt_counter
 
     puts "\n=== PQC Handshake Packet Exchange ==="
-    puts "This sample fragments the handshake into 125-byte DESERT packets."
+    puts "This sample sends multiple 125-byte DESERT packets that carry PQC material."
 
     set node_pkt_counter(handshake) 0
 
@@ -169,6 +169,7 @@ proc runPqcHandshake {} {
         puts "  RESPONSE packets sent     : [$cbr(1) getsentpkts] / $opt(handshake_response_pkts)"
         puts "  Total handshake packets   : $node_pkt_counter(handshake)"
         puts "  Packet size               : $opt(pktsize) bytes"
+        puts "  Each packet carries PQC material from the packer"
         puts "  Quantum-safe primitives   : YES (NIST PQC standards)"
         puts ""
     }
@@ -190,6 +191,7 @@ proc finish {} {
     puts "  HELLO packets sent        : [$cbr(0) getsentpkts]"
     puts "  RESPONSE packets sent     : [$cbr(1) getsentpkts]"
     puts "  Total packet size         : [expr {$handshake_pkt * $opt(pktsize)}] bytes"
+    puts "  Payload model             : packetized PQC-bearing CBR frames"
     puts ""
     puts "Cryptographic Status:"
     puts "  KEM Algorithm             : NTRU-HRSS-701"
