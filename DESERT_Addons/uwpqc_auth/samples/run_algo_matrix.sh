@@ -25,29 +25,34 @@ for kem in "${KEM_ALGORITHMS[@]}"; do
         output=$(ns samples/test_uwpqc_algo_matrix.tcl "$kem" "$sig" 2>&1)
         line=$(printf '%s\n' "$output" | grep '^RESULT|')
         if [[ -z "$line" ]]; then
-            ROWS+=("$kem|$sig|CRASH|-|-|-|-|-")
+            ROWS+=("$kem|$sig|CRASH|-|-|-|-|-|-|-")
             continue
         fi
         result=$(printf '%s\n' "$line" | cut -d'|' -f4)
         if [[ "$result" == "UNSUPPORTED" ]]; then
             reason=$(printf '%s\n' "$line" | cut -d'|' -f5-)
-            ROWS+=("$kem|$sig|UNSUPPORTED|-|-|-|-|$reason")
+            ROWS+=("$kem|$sig|UNSUPPORTED|-|-|-|-|-|-|$reason")
             continue
         fi
-        state0=$(printf '%s\n' "$line" | grep -oE 'state0=[A-Z]+' | cut -d= -f2)
-        state1=$(printf '%s\n' "$line" | grep -oE 'state1=[A-Z]+' | cut -d= -f2)
         elapsed0=$(printf '%s\n' "$line" | grep -oE 'elapsed0=[0-9.]+' | cut -d= -f2)
         elapsed1=$(printf '%s\n' "$line" | grep -oE 'elapsed1=[0-9.]+' | cut -d= -f2)
+        tx_packets0=$(printf '%s\n' "$line" | grep -oE 'tx_packets0=[0-9]+' | cut -d= -f2)
+        rx_packets0=$(printf '%s\n' "$line" | grep -oE 'rx_packets0=[0-9]+' | cut -d= -f2)
+        tx_bytes0=$(printf '%s\n' "$line" | grep -oE 'tx_bytes0=[0-9]+' | cut -d= -f2)
+        rx_bytes0=$(printf '%s\n' "$line" | grep -oE 'rx_bytes0=[0-9]+' | cut -d= -f2)
         retransmissions0=$(printf '%s\n' "$line" | grep -oE 'retransmissions0=[0-9]+' | cut -d= -f2)
-        ROWS+=("$kem|$sig|$result|${state0:--}|${state1:--}|${elapsed0:--}|${elapsed1:--}|retransmissions=${retransmissions0:--}")
+        total_bytes=$(( ${tx_bytes0:-0} + ${rx_bytes0:-0} ))
+        ROWS+=("$kem|$sig|$result|${elapsed0:--}|${elapsed1:--}|${tx_packets0:--}|${rx_packets0:--}|${tx_bytes0:--}|${rx_bytes0:--}|total_bytes=$total_bytes retransmissions=${retransmissions0:--}")
     done
 done
 
-printf '\n%-16s %-26s %-14s %-14s %-14s %-11s %-11s %s\n' \
-        "KEM" "Signature" "Result" "State(node0)" "State(node1)" "Elapsed0(s)" "Elapsed1(s)" "Notes"
-printf '%s\n' "-------------------------------------------------------------------------------------------------------------------------------"
+printf '\n%-16s %-26s %-14s %-11s %-11s %-8s %-8s %-10s %-10s %s\n' \
+        "KEM" "Signature" "Result" "Elapsed0(s)" "Elapsed1(s)" \
+        "TxPkts0" "RxPkts0" "TxBytes0" "RxBytes0" "Notes"
+printf '%s\n' "-----------------------------------------------------------------------------------------------------------------------------------------------"
 for row in "${ROWS[@]}"; do
-    IFS='|' read -r kem sig result state0 state1 elapsed0 elapsed1 notes <<< "$row"
-    printf '%-16s %-26s %-14s %-14s %-14s %-11s %-11s %s\n' \
-            "$kem" "$sig" "$result" "$state0" "$state1" "$elapsed0" "$elapsed1" "$notes"
+    IFS='|' read -r kem sig result elapsed0 elapsed1 tx_packets0 rx_packets0 tx_bytes0 rx_bytes0 notes <<< "$row"
+    printf '%-16s %-26s %-14s %-11s %-11s %-8s %-8s %-10s %-10s %s\n' \
+            "$kem" "$sig" "$result" "$elapsed0" "$elapsed1" \
+            "$tx_packets0" "$rx_packets0" "$tx_bytes0" "$rx_bytes0" "$notes"
 done

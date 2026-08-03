@@ -91,12 +91,6 @@ UwPqcAuthRetransmitTimer::expire(Event *)
 	module_->onRetransmitTimeout();
 }
 
-void
-UwPqcAuthSessionTimer::expire(Event *)
-{
-	module_->onSessionTimeout();
-}
-
 UwPqcAuthModule::UwPqcAuthModule()
 	: dest_port_(0)
 	, dest_addr_(0)
@@ -105,7 +99,6 @@ UwPqcAuthModule::UwPqcAuthModule()
 	, max_fragment_payload_(UWPQC_AUTH_FRAGMENT_SIZE)
 	, retransmit_timeout_(8.0)
 	, max_retries_(3)
-	, session_timeout_(60.0)
 	, state_(IDLE)
 	, peer_(0)
 	, session_id_(0)
@@ -114,7 +107,6 @@ UwPqcAuthModule::UwPqcAuthModule()
 	, retry_count_(0)
 	, handshake_started_(0.0)
 	, retransmit_timer_(this)
-	, session_timer_(this)
 	, active_type_(0)
 	, tx_packets_(0)
 	, rx_packets_(0)
@@ -137,13 +129,11 @@ UwPqcAuthModule::UwPqcAuthModule()
 	bind("maxFragmentPayload_", &max_fragment_payload_);
 	bind("retransmitTimeout_", &retransmit_timeout_);
 	bind("maxRetries_", &max_retries_);
-	bind("sessionTimeout_", &session_timeout_);
 }
 
 UwPqcAuthModule::~UwPqcAuthModule()
 {
 	retransmit_timer_.force_cancel();
-	session_timer_.force_cancel();
 	crypto_.cleanse(identity_secret_key_);
 	resetSessionSecrets();
 }
@@ -255,7 +245,6 @@ UwPqcAuthModule::startHandshake(uint8_t peer)
 		return false;
 	state_ = WAIT_SERVER_KEY;
 	handshake_started_ = NOW;
-	session_timer_.resched(session_timeout_);
 	++handshake_attempts_;
 	sendLogical(PQC_CLIENT_HELLO, client_hello_, true);
 	return true;
@@ -443,7 +432,6 @@ UwPqcAuthModule::handleClientHello(uint8_t sender, uint64_t session_id,
 	session_id_ = session_id;
 	seen_session_ids_[sender] = session_id;
 	client_hello_ = message;
-	session_timer_.resched(session_timeout_);
 	std::vector<uint8_t> kem_public_key;
 	if (!crypto_.kemKeypair(kem_public_key, kem_secret_key_))
 		return fail("unable to create NTRU keypair");
@@ -547,7 +535,6 @@ UwPqcAuthModule::handleClientFinish(uint8_t sender, uint64_t session_id,
 		return fail("confirmation HMAC failed");
 	}
 	crypto_.cleanse(confirmation_key);
-	session_timer_.force_cancel();
 	state_ = AUTHENTICATED;
 	++handshake_successes_;
 	handshake_elapsed_s_ = NOW - handshake_started_;
@@ -569,7 +556,6 @@ UwPqcAuthModule::handleServerFinish(uint8_t sender, uint64_t session_id,
 	crypto_.cleanse(confirmation_key_);
 	if (!valid)
 		return fail("invalid server confirmation");
-	session_timer_.force_cancel();
 	active_message_.clear();
 	state_ = AUTHENTICATED;
 	++handshake_successes_;
@@ -673,22 +659,6 @@ UwPqcAuthModule::resetSessionSecrets()
 	active_message_.clear();
 	reassembly_ = Reassembly();
 	retry_count_ = 0;
-}
-
-void
-UwPqcAuthModule::onSessionTimeout()
-{
-	if (state_ == IDLE)
-		return;
-	if (debug_) {
-		std::cout << NOW << " UwPqcAuthModule(" << local_addr_
-				<< ")::onSessionTimeout() session with peer " << static_cast<int>(peer_)
-				<< " expired in state " << stateName() << ", returning to IDLE"
-				<< std::endl;
-	}
-	retransmit_timer_.force_cancel();
-	resetSessionSecrets();
-	state_ = IDLE;
 }
 
 const char *

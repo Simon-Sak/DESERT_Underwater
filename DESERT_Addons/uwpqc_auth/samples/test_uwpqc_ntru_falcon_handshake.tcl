@@ -4,7 +4,7 @@
 # and invokes the module's public Tcl interface.
 
 set opt(starttime) 5.0
-set opt(stoptime) 120.0
+set opt(stoptime) 600.0
 set opt(tracefilename) "./uwpqc_ntru_falcon_handshake.tr"
 set opt(cltracefilename) "./uwpqc_ntru_falcon_handshake.cltr"
 set opt(freq) 25000.0
@@ -45,7 +45,6 @@ Module/MPhy/BPSK set TxPower_ $opt(txpower)
 Module/UW/PQCAuth set maxFragmentPayload_ $opt(fragment_payload)
 Module/UW/PQCAuth set retransmitTimeout_ 30.0
 Module/UW/PQCAuth set maxRetries_ 3
-Module/UW/PQCAuth set sessionTimeout_ 60.0
 
 proc createNode {index address x_position} {
     global ns tracefile cltracefile channel propagation spectral_mask opt

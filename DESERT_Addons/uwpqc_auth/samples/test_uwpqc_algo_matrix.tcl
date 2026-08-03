@@ -5,7 +5,7 @@
 # Prints a single "RESULT|..." line that a driver script can parse.
 
 set opt(starttime) 5.0
-set opt(stoptime) 120.0
+set opt(stoptime) 3600.0
 set opt(tracefilename) "./uwpqc_algo_matrix.tr"
 set opt(cltracefilename) "./uwpqc_algo_matrix.cltr"
 set opt(freq) 25000.0
@@ -47,9 +47,8 @@ $spectral_mask setBandwidth $opt(bw)
 Module/MPhy/BPSK set BitRate_ $opt(bitrate)
 Module/MPhy/BPSK set TxPower_ $opt(txpower)
 Module/UW/PQCAuth set maxFragmentPayload_ $opt(fragment_payload)
-Module/UW/PQCAuth set retransmitTimeout_ 30.0
+Module/UW/PQCAuth set retransmitTimeout_ 240.0
 Module/UW/PQCAuth set maxRetries_ 3
-Module/UW/PQCAuth set sessionTimeout_ 60.0
 
 set algo_ok 1
 set algo_error ""
@@ -173,7 +172,14 @@ proc finish {} {
     puts "RESULT|$opt(kem)|$opt(sig)|$result|state0=$state0|state1=$state1|\
 elapsed0=[dict get $stats0 handshake_elapsed_s]|\
 elapsed1=[dict get $stats1 handshake_elapsed_s]|\
+tx_packets0=[dict get $stats0 tx_packets]|\
+rx_packets0=[dict get $stats0 rx_packets]|\
 tx_bytes0=[dict get $stats0 tx_bytes]|\
+rx_bytes0=[dict get $stats0 rx_bytes]|\
+tx_fragments0=[dict get $stats0 tx_fragments]|\
+rx_fragments0=[dict get $stats0 rx_fragments]|\
+tx_bytes1=[dict get $stats1 tx_bytes]|\
+rx_bytes1=[dict get $stats1 rx_bytes]|\
 retransmissions0=[dict get $stats0 retransmissions]|\
 signature_failures0=[dict get $stats0 signature_failures]|\
 malformed_packets0=[dict get $stats0 malformed_packets]"
