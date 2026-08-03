@@ -1,0 +1,14 @@
+#ifndef UWPQC_AUTH_BUILD_CONFIG_H
+#define UWPQC_AUTH_BUILD_CONFIG_H
+
+#include <stdio.h>
+
+#define snprintf uwpqc_auth_legacy_snprintf
+#include <config.h>
+#undef snprintf
+
+#if @UWPQC_AUTH_NS_HAS_INT64@
+#define HAVE_INT64 1
+#endif
+
+#endif

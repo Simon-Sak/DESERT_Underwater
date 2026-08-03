@@ -1,6 +1,7 @@
 #ifndef UWPQC_AUTH_PACKET_H
 #define UWPQC_AUTH_PACKET_H
 
+#include "uwpqc-auth-build-config.h"
 #include <packet.h>
 #include <stdint.h>
 
