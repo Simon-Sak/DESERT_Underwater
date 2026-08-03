@@ -3,7 +3,7 @@
 # All rights reserved.
 #
 # This sample exercises the post-quantum handshake implemented by the
-# packer_uwpqc add-on. It creates a minimal two-node acoustic topology and
+# UWPQC add-on. It creates a minimal two-node acoustic topology and
 # exchanges two real DESERT packets that represent the handshake messages.
 #
 #########################################################################################
@@ -20,9 +20,9 @@ load libuwmll.so
 load libuwudp.so
 load libuwcbr.so
 
-if {[catch {load libpackeruwpqc.so} pqcLoadErr]} {
-    puts "Unable to load libpackeruwpqc.so: $pqcLoadErr"
-    puts "Build and install the packer_uwpqc add-on before running this sample."
+if {[catch {load libuwpqc.so} pqcLoadErr]} {
+    puts "Unable to load libuwpqc.so: $pqcLoadErr"
+    puts "Build and install the UWPQC add-on before running this sample."
     return
 }
 
@@ -66,7 +66,7 @@ proc createNode { id } {
 
     set cbr($id) [new Module/UW/CBR]
     set udp($id) [new Module/UW/UDP]
-    set pqc($id) [new UW/PQC/Packer]
+    set pqc($id) [new UW/PQC]
     set ipr($id) [new Module/UW/StaticRouting]
     set ipif($id) [new Module/UW/IP]
     set mll($id) [new Module/UW/MLL]

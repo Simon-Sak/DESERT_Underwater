@@ -30,7 +30,7 @@
  * @file packer_uwpqc.h
  * @author DESERT Team
  * \version 1.0.0
- * \brief Header file for Post-Quantum Cryptography (PQC) packer module
+ * \brief Header file for Post-Quantum Cryptography (PQC) module
  *        using liboqs for KEM (Key Encapsulation) and Signature operations
  */
 
@@ -55,9 +55,9 @@
 #endif
 
 /**
- * Header structure for PQC packer
+ * Header structure for PQC module
  */
-struct hdr_uwpqc {
+struct hdr_pqc {
 	uint8_t version_;   ///< Protocol version
 	uint8_t flags_;     ///< Flags (bit 0: KEM enabled, bit 1: SIG enabled)
 	uint16_t ct_len_;   ///< Ciphertext length
@@ -65,11 +65,11 @@ struct hdr_uwpqc {
 };
 
 /**
- * PQC Packer class - handles Post-Quantum Cryptography operations
+ * UWPQC class - handles Post-Quantum Cryptography operations
  * Inherits from packer base class to provide KEM encapsulation/decapsulation
  * and digital signature generation/verification
  */
-class packerUWPQC : public packer
+class UWPQC : public packer
 {
 public:
 	enum HandshakeState {
@@ -80,12 +80,12 @@ public:
 	/**
 	 * Class constructor.
 	 */
-	packerUWPQC();
+	UWPQC();
 
 	/**
 	 * Class destructor.
 	 */
-	~packerUWPQC();
+	~UWPQC();
 
 	/**
 	 * TCL command handler

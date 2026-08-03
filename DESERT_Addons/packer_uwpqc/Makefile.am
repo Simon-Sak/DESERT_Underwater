@@ -46,6 +46,6 @@ CLEANFILES = initTcl.cc
 TCL_FILES = packer-uwpqc-init.tcl
 
 initTcl.cc: Makefile $(TCL_FILES)
-	cat $(VPATH)/$(TCL_FILES) | @TCL2CPP@ PackerUwpqcTclCode > initTcl.cc
+	cat $(VPATH)/$(TCL_FILES) | @TCL2CPP@ UwpqcTclCode > initTcl.cc
 
 EXTRA_DIST = $(TCL_FILES)

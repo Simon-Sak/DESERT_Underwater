@@ -27,7 +27,7 @@
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 
-AC_INIT(packeruwpqc, 1.0.0)
+AC_INIT(uwpqc, 1.0.0)
 AM_INIT_AUTOMAKE
 AM_PROG_AR
 
@@ -48,6 +48,14 @@ AC_ARG_WITH_NSMIRACLE
 AC_CHECK_NSMIRACLE([have_nsmiracle=yes],[have_nsmiracle=no])
 if test x$have_nsmiracle != xyes ; then
   AC_MSG_ERROR([Could not find nsmiracle, is --with-nsmiracle set correctly?])
+fi  
+
+AC_ARG_WITH_DESERT
+AC_ARG_WITH_DESERT_BUILD
+
+AC_CHECK_DESERT([have_desert=yes],[have_desert=no])
+if test x$have_desert != xyes ; then
+  AC_MSG_ERROR([Could not find desert, is --with-desert set correctly?])
 fi  
 
 AC_ARG_WITH_DESERT

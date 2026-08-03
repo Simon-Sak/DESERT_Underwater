@@ -1,10 +1,10 @@
 #include <tclcl.h>
 
-extern EmbeddedTcl PackerUwpqcTclCode;
+extern EmbeddedTcl UwpqcTclCode;
 
 extern "C" int
-Packeruwpqc_Init()
+Uwpqc_Init()
 {
-	PackerUwpqcTclCode.load();
+	UwpqcTclCode.load();
 	return 0;
 }

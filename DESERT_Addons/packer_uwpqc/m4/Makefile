@@ -99,10 +99,10 @@ am__make_dryrun = (target_option=n; $(am__make_running_with_option))
 am__make_keepgoing = (target_option=k; $(am__make_running_with_option))
 am__rm_f = rm -f $(am__rm_f_notfound)
 am__rm_rf = rm -rf $(am__rm_f_notfound)
-pkgdatadir = $(datadir)/packeruwpqc
-pkgincludedir = $(includedir)/packeruwpqc
-pkglibdir = $(libdir)/packeruwpqc
-pkglibexecdir = $(libexecdir)/packeruwpqc
+pkgdatadir = $(datadir)/uwpqc
+pkgincludedir = $(includedir)/uwpqc
+pkglibdir = $(libdir)/uwpqc
+pkglibexecdir = $(libexecdir)/uwpqc
 am__cd = CDPATH="$${ZSH_VERSION+.}$(PATH_SEPARATOR)" && cd
 install_sh_DATA = $(install_sh) -c -m 644
 install_sh_PROGRAM = $(install_sh) -c
@@ -172,13 +172,13 @@ CXXCPP = g++ -E
 CXXDEPMODE = depmode=gcc3
 CXXFLAGS = -g -O2
 CYGPATH_W = echo
-DEFS = -DPACKAGE_NAME=\"packeruwpqc\" -DPACKAGE_TARNAME=\"packeruwpqc\" -DPACKAGE_VERSION=\"1.0.0\" -DPACKAGE_STRING=\"packeruwpqc\ 1.0.0\" -DPACKAGE_BUGREPORT=\"\" -DPACKAGE_URL=\"\" -DPACKAGE=\"packeruwpqc\" -DVERSION=\"1.0.0\" -DHAVE_STDIO_H=1 -DHAVE_STDLIB_H=1 -DHAVE_STRING_H=1 -DHAVE_INTTYPES_H=1 -DHAVE_STDINT_H=1 -DHAVE_STRINGS_H=1 -DHAVE_SYS_STAT_H=1 -DHAVE_SYS_TYPES_H=1 -DHAVE_UNISTD_H=1 -DSTDC_HEADERS=1 -DHAVE_DLFCN_H=1 -DLT_OBJDIR=\".libs/\" -DCPP_NAMESPACE=std
+DEFS = -DPACKAGE_NAME=\"uwpqc\" -DPACKAGE_TARNAME=\"uwpqc\" -DPACKAGE_VERSION=\"1.0.0\" -DPACKAGE_STRING=\"uwpqc\ 1.0.0\" -DPACKAGE_BUGREPORT=\"\" -DPACKAGE_URL=\"\" -DPACKAGE=\"uwpqc\" -DVERSION=\"1.0.0\" -DHAVE_STDIO_H=1 -DHAVE_STDLIB_H=1 -DHAVE_STRING_H=1 -DHAVE_INTTYPES_H=1 -DHAVE_STDINT_H=1 -DHAVE_STRINGS_H=1 -DHAVE_SYS_STAT_H=1 -DHAVE_SYS_TYPES_H=1 -DHAVE_UNISTD_H=1 -DSTDC_HEADERS=1 -DHAVE_DLFCN_H=1 -DLT_OBJDIR=\".libs/\" -DCPP_NAMESPACE=std
 DEPDIR = .deps
-DESERT_CPPFLAGS = 
-DESERT_DISTCHECK_CONFIGURE_FLAGS = 
-DESERT_LDFLAGS = 
-DESERT_LDFLAGS_BUILD = 
-DESERT_LIBADD = 
+DESERT_CPPFLAGS =  -I/home/mr-test/Downloads/final_project/DESERT_Underwater/DESERT_Framework/DESERT/network/uwip -I/home/mr-test/Downloads/final_project/DESERT_Underwater/DESERT_Framework/DESERT/physical/uw-al -I/home/mr-test/Downloads/final_project/DESERT_Underwater/DESERT_Framework/DESERT/network/uwip -I/home/mr-test/Downloads/final_project/DESERT_Underwater/DESERT_Framework/DESERT/physical/uw-al
+DESERT_DISTCHECK_CONFIGURE_FLAGS = --with-desert=/home/mr-test/Downloads/final_project/DESERT_Underwater/DESERT_Framework/DESERT
+DESERT_LDFLAGS =  -L/home/mr-test/Downloads/final_project/DESERT_Underwater/DESERT_Framework/DESERT/network/uwip -L/home/mr-test/Downloads/final_project/DESERT_Underwater/DESERT_Framework/DESERT/physical/uw-al
+DESERT_LDFLAGS_BUILD =  -L/home/mr-test/Downloads/final_project/DESERT_Underwater/DESERT_buildCopy_LOCAL_CLEAN/network/uwip -L/home/mr-test/Downloads/final_project/DESERT_Underwater/DESERT_buildCopy_LOCAL_CLEAN/physical/uw-al
+DESERT_LIBADD =  -luwip -luwal
 DLLTOOL = dlltool
 DSYMUTIL = 
 DUMPBIN = 
@@ -225,11 +225,11 @@ OQS_LDFLAGS = -L/home/mr-test/Downloads/final_project/DESERT_Underwater/DESERT_b
 OQS_LIBADD = -loqs -lssl -lcrypto
 OTOOL = 
 OTOOL64 = 
-PACKAGE = packeruwpqc
+PACKAGE = uwpqc
 PACKAGE_BUGREPORT = 
-PACKAGE_NAME = packeruwpqc
-PACKAGE_STRING = packeruwpqc 1.0.0
-PACKAGE_TARNAME = packeruwpqc
+PACKAGE_NAME = uwpqc
+PACKAGE_STRING = uwpqc 1.0.0
+PACKAGE_TARNAME = uwpqc
 PACKAGE_URL = 
 PACKAGE_VERSION = 1.0.0
 PATH_SEPARATOR = :

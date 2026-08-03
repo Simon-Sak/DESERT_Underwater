@@ -1,6 +1,6 @@
-# packer_uwpqc
+# UWPQC
 
-`packer_uwpqc` is a DESERT Underwater packer module that adds post-quantum cryptography support. It integrates the liboqs library that provides the implementation of the post-quantum algorithms.
+`UWPQC` is a DESERT Underwater module that adds post-quantum cryptography support. It integrates the liboqs library that provides the implementation of the post-quantum algorithms.
 
 ## What it does
 
@@ -23,7 +23,7 @@ The flags field uses:
 
 ## How it works
 
-At startup, the C++ class registers itself with Tcl as `UW/PQC/Packer`.
+At startup, the C++ class registers itself with Tcl as `UW/PQC`.
 When a Tcl script creates an object of that class, the constructor:
 
 1. sets the header field widths
@@ -48,7 +48,7 @@ When a packet is unpacked, `unpackMyHdr()` reads back the same header fields and
 
 ## Tcl commands
 
-The module exposes the following Tcl commands on a `UW/PQC/Packer` object.
+The module exposes the following Tcl commands on a `UW/PQC` object.
 
 ### `kemEncapsulate <plaintext>`
 Encapsulates the provided plaintext and returns the ciphertext as a hex string.
@@ -84,10 +84,10 @@ For KEM, it prefers:
 
 For signatures, it prefers:
 
-1. `Falcon-1024`
-2. `ML-DSA-65`
-3. `SLH_DSA_PURE_SHA2_128S`
-4. `Falcon-512`
+1. `Falcon-512`
+2. `Falcon-1024`
+3. `ML-DSA-65`
+4. `SLH_DSA_PURE_SHA2_128S`
 5. `Dilithium3`
 
 ## Example usage
@@ -95,11 +95,11 @@ For signatures, it prefers:
 A minimal Tcl setup looks like this:
 
 ```tcl
-load libpackeruwpqc.so
-set pqcPacker [new UW/PQC/Packer]
+load libuwpqc.so
+set pqcPacker [new UW/PQC]
 
 catch {$pqcPacker setKemAlgorithm NTRU-HRSS-701} kemErr
-catch {$pqcPacker setSigAlgorithm Falcon-1024} sigErr
+catch {$pqcPacker setSigAlgorithm Falcon-512} sigErr
 
 set ct [$pqcPacker kemEncapsulate "hello"]
 set sig [$pqcPacker sigSign "hello"]

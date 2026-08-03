@@ -8,20 +8,20 @@
 #include <iostream>
 #include <sstream>
 
-static class PackerUWPQCClass : public TclClass
+static class UWPQCClass : public TclClass
 {
 public:
-	PackerUWPQCClass()
-		: TclClass("UW/PQC/Packer")
+	UWPQCClass()
+		: TclClass("UW/PQC")
 	{
 	}
 
 	TclObject *
 	create(int, const char *const *)
 	{
-		return (new packerUWPQC());
+		return (new UWPQC());
 	}
-} class_module_packerUWPQC;
+} class_module_uwpqc;
 
 namespace {
 
@@ -107,7 +107,7 @@ readLengthPrefixedBytes(const std::vector<uint8_t>& data, size_t& offset,
 
 } // namespace
 
-packerUWPQC::packerUWPQC()
+UWPQC::UWPQC()
 	: packer(false)
 	, version_bits_(8)
 	, flags_bits_(8)
@@ -127,7 +127,7 @@ packerUWPQC::packerUWPQC()
 }
 
 int
-packerUWPQC::command(int argc, const char *const *argv)
+UWPQC::command(int argc, const char *const *argv)
 {
 	if (argc == 3 && strcmp(argv[1], "kemEncapsulate") == 0) {
 #ifdef HAVE_LIBOQS
@@ -291,7 +291,7 @@ packerUWPQC::command(int argc, const char *const *argv)
 	return packer::command(argc, argv);
 }
 
-packerUWPQC::~packerUWPQC()
+UWPQC::~UWPQC()
 {
 #ifdef HAVE_LIBOQS
 	if (kem_ != nullptr) {
@@ -304,7 +304,7 @@ packerUWPQC::~packerUWPQC()
 }
 
 void
-packerUWPQC::init()
+UWPQC::init()
 {
 	n_bits.clear();
 	initPQCAlgorithms();
@@ -327,7 +327,7 @@ packerUWPQC::init()
 }
 
 void
-packerUWPQC::initPQCAlgorithms()
+UWPQC::initPQCAlgorithms()
 {
 #ifdef HAVE_LIBOQS
 	pqc_kem_alg_ = getDefaultKEMAlgorithm();
@@ -362,7 +362,7 @@ packerUWPQC::initPQCAlgorithms()
 }
 
 std::string
-packerUWPQC::getDefaultKEMAlgorithm()
+UWPQC::getDefaultKEMAlgorithm()
 {
 #ifdef HAVE_LIBOQS
 	if (OQS_KEM_alg_is_enabled("NTRU-HRSS-701")) {
@@ -387,7 +387,7 @@ packerUWPQC::getDefaultKEMAlgorithm()
 }
 
 std::string
-packerUWPQC::resolveSignatureAlgorithm(const std::string& requested) const
+UWPQC::resolveSignatureAlgorithm(const std::string& requested) const
 {
 #ifdef HAVE_LIBOQS
 	if (requested.empty()) {
@@ -398,12 +398,12 @@ packerUWPQC::resolveSignatureAlgorithm(const std::string& requested) const
 	std::transform(normalized.begin(), normalized.end(), normalized.begin(),
 		[](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 
-	if (normalized == "falcon" || normalized == "falcon-1024" || normalized.find("falcon") != std::string::npos) {
-		if (OQS_SIG_alg_is_enabled("Falcon-1024")) {
-			return "Falcon-1024";
-		}
+	if (normalized == "falcon" || normalized == "falcon-512" || normalized == "falcon-1024" || normalized.find("falcon") != std::string::npos) {
 		if (OQS_SIG_alg_is_enabled("Falcon-512")) {
 			return "Falcon-512";
+		}
+		if (OQS_SIG_alg_is_enabled("Falcon-1024")) {
+			return "Falcon-1024";
 		}
 	}
 
@@ -432,9 +432,12 @@ packerUWPQC::resolveSignatureAlgorithm(const std::string& requested) const
 }
 
 std::string
-packerUWPQC::getDefaultSigAlgorithm()
+UWPQC::getDefaultSigAlgorithm()
 {
 #ifdef HAVE_LIBOQS
+	if (OQS_SIG_alg_is_enabled("Falcon-512")) {
+		return "Falcon-512";
+	}
 	if (OQS_SIG_alg_is_enabled("Falcon-1024")) {
 		return "Falcon-1024";
 	}
@@ -444,9 +447,6 @@ packerUWPQC::getDefaultSigAlgorithm()
 	if (OQS_SIG_alg_is_enabled("SLH_DSA_PURE_SHA2_128S")) {
 		return "SLH_DSA_PURE_SHA2_128S";
 	}
-	if (OQS_SIG_alg_is_enabled("Falcon-512")) {
-		return "Falcon-512";
-	}
 	if (OQS_SIG_alg_is_enabled("Dilithium3")) {
 		return "Dilithium3";
 	}
@@ -455,7 +455,7 @@ packerUWPQC::getDefaultSigAlgorithm()
 }
 
 void
-packerUWPQC::generateKEMKeys()
+UWPQC::generateKEMKeys()
 {
 #ifdef HAVE_LIBOQS
 	if (kem_ == nullptr) return;
@@ -489,7 +489,7 @@ packerUWPQC::generateKEMKeys()
 }
 
 void
-packerUWPQC::generateSigKeys()
+UWPQC::generateSigKeys()
 {
 #ifdef HAVE_LIBOQS
 	if (sig_ == nullptr) return;
@@ -523,14 +523,14 @@ packerUWPQC::generateSigKeys()
 }
 
 std::vector<uint8_t>
-packerUWPQC::encapsulate(const std::vector<uint8_t>& plaintext)
+UWPQC::encapsulate(const std::vector<uint8_t>& plaintext)
 {
 	(void)plaintext;
 	return encapsulateWithPublicKey(kem_public_key_);
 }
 
 std::vector<uint8_t>
-packerUWPQC::encapsulateWithPublicKey(const std::vector<uint8_t>& peer_public_key)
+UWPQC::encapsulateWithPublicKey(const std::vector<uint8_t>& peer_public_key)
 {
 #ifdef HAVE_LIBOQS
 	if (kem_ == nullptr || peer_public_key.empty()) {
@@ -563,7 +563,7 @@ packerUWPQC::encapsulateWithPublicKey(const std::vector<uint8_t>& peer_public_ke
 }
 
 std::vector<uint8_t>
-packerUWPQC::decapsulate(const std::vector<uint8_t>& ciphertext)
+UWPQC::decapsulate(const std::vector<uint8_t>& ciphertext)
 {
 #ifdef HAVE_LIBOQS
 	if (kem_ == nullptr || kem_secret_key_.empty()) {
@@ -597,7 +597,7 @@ packerUWPQC::decapsulate(const std::vector<uint8_t>& ciphertext)
 }
 
 std::vector<uint8_t>
-packerUWPQC::sign(const std::vector<uint8_t>& message)
+UWPQC::sign(const std::vector<uint8_t>& message)
 {
 #ifdef HAVE_LIBOQS
 	if (sig_ == nullptr || sig_secret_key_.empty()) {
@@ -635,14 +635,14 @@ packerUWPQC::sign(const std::vector<uint8_t>& message)
 }
 
 bool
-packerUWPQC::verify(const std::vector<uint8_t>& message, 
+UWPQC::verify(const std::vector<uint8_t>& message, 
 					 const std::vector<uint8_t>& signature)
 {
 	return verifyWithPublicKey(message, signature, sig_public_key_);
 }
 
 bool
-packerUWPQC::verifyWithPublicKey(const std::vector<uint8_t>& message,
+UWPQC::verifyWithPublicKey(const std::vector<uint8_t>& message,
 							 const std::vector<uint8_t>& signature,
 							 const std::vector<uint8_t>& public_key)
 {
@@ -671,7 +671,7 @@ packerUWPQC::verifyWithPublicKey(const std::vector<uint8_t>& message,
 }
 
 std::vector<uint8_t>
-packerUWPQC::buildHelloMessage(const std::vector<uint8_t>& challenge)
+UWPQC::buildHelloMessage(const std::vector<uint8_t>& challenge)
 {
 #ifdef HAVE_LIBOQS
 	if (kem_ == nullptr || sig_ == nullptr || kem_public_key_.empty() || sig_public_key_.empty()) {
@@ -713,7 +713,7 @@ packerUWPQC::buildHelloMessage(const std::vector<uint8_t>& challenge)
 }
 
 std::vector<uint8_t>
-packerUWPQC::processHelloMessage(const std::vector<uint8_t>& hello_message,
+UWPQC::processHelloMessage(const std::vector<uint8_t>& hello_message,
 								 const std::vector<uint8_t>& challenge)
 {
 #ifdef HAVE_LIBOQS
@@ -782,7 +782,7 @@ packerUWPQC::processHelloMessage(const std::vector<uint8_t>& hello_message,
 }
 
 std::vector<uint8_t>
-packerUWPQC::processResponseMessage(const std::vector<uint8_t>& response_message,
+UWPQC::processResponseMessage(const std::vector<uint8_t>& response_message,
 								 const std::vector<uint8_t>& challenge)
 {
 #ifdef HAVE_LIBOQS
@@ -844,7 +844,7 @@ packerUWPQC::processResponseMessage(const std::vector<uint8_t>& response_message
 }
 
 void
-packerUWPQC::resetHandshakeState()
+UWPQC::resetHandshakeState()
 {
 	peer_kem_public_key_.clear();
 	peer_sig_public_key_.clear();
@@ -854,9 +854,9 @@ packerUWPQC::resetHandshakeState()
 }
 
 size_t
-packerUWPQC::packMyHdr(Packet *p, unsigned char *buf, size_t offset)
+UWPQC::packMyHdr(Packet *p, unsigned char *buf, size_t offset)
 {
-	hdr_uwpqc hdr;
+	hdr_pqc hdr;
 	hdr.version_ = 1;
 	hdr.flags_ = 0;
 	hdr.ct_len_ = 0;
@@ -918,9 +918,9 @@ packerUWPQC::packMyHdr(Packet *p, unsigned char *buf, size_t offset)
 }
 
 size_t
-packerUWPQC::unpackMyHdr(unsigned char *buf, size_t offset, Packet *p)
+UWPQC::unpackMyHdr(unsigned char *buf, size_t offset, Packet *p)
 {
-	hdr_uwpqc hdr;
+	hdr_pqc hdr;
 	memset(&hdr, 0, sizeof(hdr));
 	
 	// Unpack the header fields using packer's get() method
@@ -962,7 +962,7 @@ packerUWPQC::unpackMyHdr(unsigned char *buf, size_t offset, Packet *p)
 }
 
 void
-packerUWPQC::printMyHdrMap()
+UWPQC::printMyHdrMap()
 {
 	std::cout << "\033[0;46;30m Packer Name \033[0m: UWPQC (Post-Quantum Cryptography)" << std::endl;
 #ifdef HAVE_LIBOQS
@@ -983,7 +983,7 @@ packerUWPQC::printMyHdrMap()
 }
 
 void
-packerUWPQC::printMyHdrFields(Packet *p)
+UWPQC::printMyHdrFields(Packet *p)
 {
 	std::cout << "  UWPQC packer header: ";
 	std::cout << "(use_kem=" << use_kem_ << " use_sig=" << use_sig_ << ")" << std::endl;
