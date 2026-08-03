@@ -40,19 +40,22 @@ for kem in "${KEM_ALGORITHMS[@]}"; do
         rx_packets0=$(printf '%s\n' "$line" | grep -oE 'rx_packets0=[0-9]+' | cut -d= -f2)
         tx_bytes0=$(printf '%s\n' "$line" | grep -oE 'tx_bytes0=[0-9]+' | cut -d= -f2)
         rx_bytes0=$(printf '%s\n' "$line" | grep -oE 'rx_bytes0=[0-9]+' | cut -d= -f2)
-        retransmissions0=$(printf '%s\n' "$line" | grep -oE 'retransmissions0=[0-9]+' | cut -d= -f2)
         total_bytes=$(( ${tx_bytes0:-0} + ${rx_bytes0:-0} ))
-        ROWS+=("$kem|$sig|$result|${elapsed0:--}|${elapsed1:--}|${tx_packets0:--}|${rx_packets0:--}|${tx_bytes0:--}|${rx_bytes0:--}|total_bytes=$total_bytes retransmissions=${retransmissions0:--}")
+        total_packets=$(( ${tx_packets0:-0} + ${rx_packets0:-0} ))
+        ROWS+=("$kem|$sig|$result|${elapsed0:--}|${elapsed1:--}|${tx_packets0:--}|${rx_packets0:--}|${tx_bytes0:--}|${rx_bytes0:--}|$total_bytes|$total_packets")
     done
 done
 
-printf '\n%-16s %-26s %-14s %-11s %-11s %-8s %-8s %-10s %-10s %s\n' \
-        "KEM" "Signature" "Result" "Elapsed0(s)" "Elapsed1(s)" \
-        "TxPkts0" "RxPkts0" "TxBytes0" "RxBytes0" "Notes"
+# Sort rows by handshake time (field 4, elapsed0), pushing CRASH/UNSUPPORTED rows last.
+mapfile -t ROWS < <(printf '%s\n' "${ROWS[@]}" | awk -F'|' '{key=($4=="-"?999999:$4); print key"|"$0}' | sort -t'|' -k1,1g | cut -d'|' -f2-)
+
+printf '\n%-16s %-26s %-14s %-13s %-13s %-12s %-12s %-11s %-11s %-11s %s\n' \
+        "KEM" "Signature" "Result" "Node0 Time(s)" "Node1 Time(s)" \
+        "Node0 TxPkts" "Node0 RxPkts" "Node0 TxB" "Node0 RxB" "TotalBytes" "TotalPkts"
 printf '%s\n' "-----------------------------------------------------------------------------------------------------------------------------------------------"
 for row in "${ROWS[@]}"; do
-    IFS='|' read -r kem sig result elapsed0 elapsed1 tx_packets0 rx_packets0 tx_bytes0 rx_bytes0 notes <<< "$row"
-    printf '%-16s %-26s %-14s %-11s %-11s %-8s %-8s %-10s %-10s %s\n' \
+    IFS='|' read -r kem sig result elapsed0 elapsed1 tx_packets0 rx_packets0 tx_bytes0 rx_bytes0 total_bytes total_packets <<< "$row"
+    printf '%-16s %-26s %-14s %-13s %-13s %-12s %-12s %-11s %-11s %-11s %s\n' \
             "$kem" "$sig" "$result" "$elapsed0" "$elapsed1" \
-            "$tx_packets0" "$rx_packets0" "$tx_bytes0" "$rx_bytes0" "$notes"
+            "$tx_packets0" "$rx_packets0" "$tx_bytes0" "$rx_bytes0" "$total_bytes" "$total_packets"
 done
