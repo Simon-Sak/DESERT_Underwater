@@ -2,16 +2,23 @@
 # Runs samples/test_uwpqc_algo_matrix.tcl once per (KEM, signature) algorithm
 # combination and prints a summary table of the results.
 #
+# Requires the DESERT environment to already be sourced (source
+# <dest_folder>/environment), so that 'ns' and its libraries are on
+# PATH/LD_LIBRARY_PATH regardless of where DESERT was installed.
+#
 # Usage: ./run_algo_matrix.sh
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ADDON_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-DESERT_ROOT="$(cd "$ADDON_DIR/../.." && pwd)"
-BUILD_DIR="$DESERT_ROOT/DESERT_buildCopy_LOCAL_CLEAN"
 
-export LD_LIBRARY_PATH="$ADDON_DIR/.libs:$BUILD_DIR/lib"
-export PATH="$BUILD_DIR/bin:$PATH"
+if ! command -v ns >/dev/null 2>&1; then
+    echo "error: 'ns' not found in PATH -- source <dest_folder>/environment first" >&2
+    exit 1
+fi
+
+# Prepend the addon's own .libs/ for dev builds that were compiled but not yet installed.
+export LD_LIBRARY_PATH="$ADDON_DIR/.libs${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
 KEM_ALGORITHMS=("ML-KEM-512" "HQC-1" "NTRU-HPS-2048-509")
 SIG_ALGORITHMS=("ML-DSA-44" "SLH_DSA_PURE_SHA2_128S" "Falcon-512")
