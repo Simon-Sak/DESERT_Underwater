@@ -23,8 +23,10 @@ if test x$have_desert != xyes; then
 fi
 
 AC_ARG_WITH([oqs],
-  [AS_HELP_STRING([--with-oqs=PREFIX], [liboqs installation prefix])],
-  [oqs_prefix="$withval"], [oqs_prefix="/usr/local"])
+  [AS_HELP_STRING([--with-oqs=PREFIX], [liboqs installation prefix (default: same as --prefix)])],
+  [oqs_prefix="$withval"],
+  [oqs_prefix="$prefix"
+   test "x$oqs_prefix" = xNONE && oqs_prefix="$ac_default_prefix"])
 
 AC_ARG_WITH([ns-bin],
   [AS_HELP_STRING([--with-ns-bin=PATH], [DESERT ns executable for ABI detection])],

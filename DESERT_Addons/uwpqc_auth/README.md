@@ -82,7 +82,7 @@ Two sample scripts are provided:
   (`ML-KEM-512`/`HQC-1`/`NTRU-HPS-2048-509` x `ML-DSA-44`/`SLH_DSA_PURE_SHA2_128S`/
   `Falcon-512`) and prints a comparison table.
 
-## KEM and signature algorithm choice
+## KEM and signature schemes
 
 The module's default KEM is **NTRU-HPS-2048-509** and
 default signature scheme is **Falcon-512**. The main reason for this choice is very small key and signature size, which is most important consideration in bandwidth limited acoustic networks. Both algorithms are at NIST level 1 i.e. about as hard to break as AES-128. If higher security is needed the liboqs library provides variants of these algorithms up to NIST level 5 corresponding to AES-256, but these have bigger key and signature sizes.

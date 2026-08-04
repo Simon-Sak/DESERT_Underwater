@@ -17,4 +17,5 @@ uwmphy_modem
 ms2c_evologics_lowlev (requires uwmphy_modem)
 wossgmmob3D    (requires WOSS)
 wossgroupmob3D (requires WOSS)
+uwpqc_auth     (requires liboqs, OpenSSL)
 ALL            (installs all addons)
