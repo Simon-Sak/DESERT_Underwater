@@ -12,7 +12,11 @@ enum UwPqcAuthMessageType : uint8_t {
 	PQC_CLIENT_HELLO = 1,
 	PQC_SERVER_KEY = 2,
 	PQC_CLIENT_FINISH = 3,
-	PQC_SERVER_FINISH = 4
+	PQC_SERVER_FINISH = 4,
+	// Control packet: receiver -> sender, carrying a missing-fragment bitmap
+	// (in payload_) so only the lost fragments need to be resent instead of
+	// the whole logical message.
+	PQC_FRAGMENT_NAK = 5
 };
 
 typedef struct hdr_uwpqc_auth {

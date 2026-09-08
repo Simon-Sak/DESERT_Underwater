@@ -29,9 +29,28 @@ private:
 	UwPqcAuthModule *module_;
 };
 
+// Fires when no new fragment has been received for a while on an incomplete
+// reassembly, so the receiver can NAK the specific missing fragments instead
+// of waiting for the sender's much longer whole-message retransmit timeout.
+class UwPqcAuthGapTimer : public TimerHandler
+{
+public:
+	explicit UwPqcAuthGapTimer(UwPqcAuthModule *module)
+		: module_(module)
+	{
+	}
+
+protected:
+	void expire(Event *) override;
+
+private:
+	UwPqcAuthModule *module_;
+};
+
 class UwPqcAuthModule : public Module
 {
 	friend class UwPqcAuthRetransmitTimer;
+	friend class UwPqcAuthGapTimer;
 
 public:
 	UwPqcAuthModule();
@@ -41,6 +60,7 @@ public:
 	void recv(Packet *packet) override;
 
 	void onRetransmitTimeout();
+	void onGapTimeout();
 
 private:
 	enum State {
@@ -71,6 +91,8 @@ private:
 	void sendFragment(uint8_t type, uint64_t session_id, uint32_t sequence,
 			uint16_t index, uint16_t count, const uint8_t *payload, size_t length,
 			double delay);
+	void sendNak();
+	void handleNak(const hdr_uwpqc_auth *header);
 	void handleComplete(uint8_t type, uint8_t sender, uint8_t receiver,
 			uint64_t session_id, const std::vector<uint8_t> &message);
 	void handleClientHello(uint8_t sender, uint64_t session_id,
@@ -105,14 +127,19 @@ private:
 	int max_fragment_payload_;
 	double retransmit_timeout_;
 	int max_retries_;
+	double gap_timeout_;
+	int max_nak_retries_;
 	State state_;
 	uint8_t peer_;
 	uint64_t session_id_;
 	uint32_t next_sequence_;
+	uint32_t active_sequence_;
 	int uid_counter_;
 	int retry_count_;
+	int nak_retry_count_;
 	double handshake_started_;
 	UwPqcAuthRetransmitTimer retransmit_timer_;
+	UwPqcAuthGapTimer gap_timer_;
 	UwPqcAuthCrypto crypto_;
 	std::vector<uint8_t> identity_public_key_;
 	std::vector<uint8_t> identity_secret_key_;
@@ -135,6 +162,9 @@ private:
 	uint64_t tx_fragments_;
 	uint64_t rx_fragments_;
 	uint64_t retransmissions_;
+	uint64_t selective_retransmissions_;
+	uint64_t naks_sent_;
+	uint64_t naks_received_;
 	uint64_t signature_failures_;
 	uint64_t malformed_packets_;
 	uint64_t replayed_hellos_;

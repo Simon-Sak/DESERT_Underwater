@@ -54,7 +54,7 @@ KEM_ALGORITHMS=("ML-KEM-512" "HQC-1" "NTRU-HPS-2048-509")
 SIG_ALGORITHMS=("ML-DSA-44" "SLH_DSA_PURE_SHA2_128S" "Falcon-512")
 
 RESULTS_CSV="./uwpqc_physical_per_results.csv"
-echo "kem,sig,seed,per,distance,result,elapsed0,elapsed1,tx_fragments0,tx_fragments1,retransmissions0,retransmissions1,phy_pkts_lost0,phy_pkts_lost1,phy_pkts_sent0,phy_pkts_sent1,empirical_per" \
+echo "kem,sig,seed,per,distance,result,elapsed0,elapsed1,tx_fragments0,tx_fragments1,retransmissions0,retransmissions1,selective_retransmissions0,selective_retransmissions1,naks_sent0,naks_sent1,phy_pkts_lost0,phy_pkts_lost1,phy_pkts_sent0,phy_pkts_sent1,empirical_per" \
     > "$RESULTS_CSV"
 
 total_combos=$(( ${#KEM_ALGORITHMS[@]} * ${#SIG_ALGORITHMS[@]} ))
@@ -76,33 +76,43 @@ for kem in "${KEM_ALGORITHMS[@]}"; do
                 output=$(ns samples/test_uwpqc_seed_per_matrix.tcl "$kem" "$sig" "$seed" "$distance" 2>/dev/null)
                 line=$(printf '%s\n' "$output" | grep '^RESULT|')
                 if [[ -z "$line" ]]; then
-                    echo "$kem,$sig,$seed,$per,$distance,CRASH,-,-,-,-,-,-,-,-,-,-,-" >> "$RESULTS_CSV"
+                    echo "$kem,$sig,$seed,$per,$distance,CRASH,-,-,-,-,-,-,-,-,-,-,-,-,-,-" >> "$RESULTS_CSV"
                     continue
                 fi
 
-                result=$(printf '%s\n' "$line" | grep -oE 'result=[A-Z]+' | cut -d= -f2)
-                elapsed0=$(printf '%s\n' "$line" | grep -oE 'elapsed0=[0-9.]+' | cut -d= -f2)
-                elapsed1=$(printf '%s\n' "$line" | grep -oE 'elapsed1=[0-9.]+' | cut -d= -f2)
-                tx_fragments0=$(printf '%s\n' "$line" | grep -oE 'tx_fragments0=[0-9]+' | cut -d= -f2)
-                tx_fragments1=$(printf '%s\n' "$line" | grep -oE 'tx_fragments1=[0-9]+' | cut -d= -f2)
-                retransmissions0=$(printf '%s\n' "$line" | grep -oE 'retransmissions0=[0-9]+' | cut -d= -f2)
-                retransmissions1=$(printf '%s\n' "$line" | grep -oE 'retransmissions1=[0-9]+' | cut -d= -f2)
-                phy_pkts_lost0=$(printf '%s\n' "$line" | grep -oE 'phy_pkts_lost0=[0-9]+' | cut -d= -f2)
-                phy_pkts_lost1=$(printf '%s\n' "$line" | grep -oE 'phy_pkts_lost1=[0-9]+' | cut -d= -f2)
-                phy_pkts_sent0=$(printf '%s\n' "$line" | grep -oE 'phy_pkts_sent0=[0-9]+' | cut -d= -f2)
-                phy_pkts_sent1=$(printf '%s\n' "$line" | grep -oE 'phy_pkts_sent1=[0-9]+' | cut -d= -f2)
+                # NOTE: patterns are anchored on the RESULT line's '|'
+                # delimiter (optionally followed by a single space, which
+                # Tcl's backslash-newline line continuation inserts) so that
+                # e.g. "retransmissions0=" cannot accidentally match as a
+                # substring of "selective_retransmissions0=". Without this
+                # anchor, grep -oE returns two matches per line and the
+                # extracted variable ends up containing an embedded newline,
+                # which corrupts the CSV (each row silently splits into
+                # multiple physical lines).
+                result=$(printf '%s\n' "$line" | grep -oE '\| ?result=[A-Z]+' | cut -d= -f2)
+                elapsed0=$(printf '%s\n' "$line" | grep -oE '\| ?elapsed0=[0-9.]+' | cut -d= -f2)
+                elapsed1=$(printf '%s\n' "$line" | grep -oE '\| ?elapsed1=[0-9.]+' | cut -d= -f2)
+                tx_fragments0=$(printf '%s\n' "$line" | grep -oE '\| ?tx_fragments0=[0-9]+' | cut -d= -f2)
+                tx_fragments1=$(printf '%s\n' "$line" | grep -oE '\| ?tx_fragments1=[0-9]+' | cut -d= -f2)
+                retransmissions0=$(printf '%s\n' "$line" | grep -oE '\| ?retransmissions0=[0-9]+' | cut -d= -f2)
+                retransmissions1=$(printf '%s\n' "$line" | grep -oE '\| ?retransmissions1=[0-9]+' | cut -d= -f2)
+                selective_retransmissions0=$(printf '%s\n' "$line" | grep -oE '\| ?selective_retransmissions0=[0-9]+' | cut -d= -f2)
+                selective_retransmissions1=$(printf '%s\n' "$line" | grep -oE '\| ?selective_retransmissions1=[0-9]+' | cut -d= -f2)
+                naks_sent0=$(printf '%s\n' "$line" | grep -oE '\| ?naks_sent0=[0-9]+' | cut -d= -f2)
+                naks_sent1=$(printf '%s\n' "$line" | grep -oE '\| ?naks_sent1=[0-9]+' | cut -d= -f2)
+                phy_pkts_lost0=$(printf '%s\n' "$line" | grep -oE '\| ?phy_pkts_lost0=[0-9]+' | cut -d= -f2)
+                phy_pkts_lost1=$(printf '%s\n' "$line" | grep -oE '\| ?phy_pkts_lost1=[0-9]+' | cut -d= -f2)
+                phy_pkts_sent0=$(printf '%s\n' "$line" | grep -oE '\| ?phy_pkts_sent0=[0-9]+' | cut -d= -f2)
+                phy_pkts_sent1=$(printf '%s\n' "$line" | grep -oE '\| ?phy_pkts_sent1=[0-9]+' | cut -d= -f2)
 
                 empirical_per=$(awk -v l0="${phy_pkts_lost0:-0}" -v l1="${phy_pkts_lost1:-0}" \
                     -v s0="${phy_pkts_sent0:-0}" -v s1="${phy_pkts_sent1:-0}" \
                     'BEGIN { total = s0 + s1; if (total > 0) printf "%.4f", (l0 + l1) / total; else print "-" }')
 
-                echo "$kem,$sig,$seed,$per,$distance,${result:-UNKNOWN},${elapsed0:--},${elapsed1:--},${tx_fragments0:--},${tx_fragments1:--},${retransmissions0:--},${retransmissions1:--},${phy_pkts_lost0:--},${phy_pkts_lost1:--},${phy_pkts_sent0:--},${phy_pkts_sent1:--},$empirical_per" \
+                echo "$kem,$sig,$seed,$per,$distance,${result:-UNKNOWN},${elapsed0:--},${elapsed1:--},${tx_fragments0:--},${tx_fragments1:--},${retransmissions0:--},${retransmissions1:--},${selective_retransmissions0:--},${selective_retransmissions1:--},${naks_sent0:--},${naks_sent1:--},${phy_pkts_lost0:--},${phy_pkts_lost1:--},${phy_pkts_sent0:--},${phy_pkts_sent1:--},$empirical_per" \
                     >> "$RESULTS_CSV"
-
-                if (( run_idx % 20 == 0 )); then
-                    echo "  ... $run_idx/$runs_per_protocol done (per=$per, distance=${distance}m)"
-                fi
             done
+            echo "  ... per=$per (distance=${distance}m) done: $run_idx/$runs_per_protocol runs"
         done
     done
 done
@@ -112,34 +122,49 @@ echo
 echo "All runs complete in ${elapsed_wall}s. Raw results: $RESULTS_CSV"
 echo
 
-# Per-protocol, per-PER-level summary: success rate, average handshake time
-# (successes only), and average empirically observed PER, so the 10%-100%
-# sweep is clearly visible for each protocol.
-awk -F',' 'NR > 1 {
-    key = $1 "|" $2 "|" $4
-    total[key]++
-    kemof[key] = $1; sigof[key] = $2; perof[key] = $4
-    if ($6 == "AUTHENTICATED") {
-        ok[key]++
-        if ($7 != "-") { sum_elapsed[key] += $7; n_elapsed[key]++ }
+# One summary table per PER level (success rate, average handshake time for
+# successes, and average empirically observed PER across all 9 protocols),
+# followed by a single global summary across all levels. The header/separator
+# are printed OUTSIDE the sort pipeline so they can't get sorted into the
+# middle of the data rows.
+#
+# NOTE: empirical_per is CSV column 21 (kem,sig,seed,per,distance,result,
+# elapsed0,elapsed1,tx_fragments0,tx_fragments1,retransmissions0,
+# retransmissions1,selective_retransmissions0,selective_retransmissions1,
+# naks_sent0,naks_sent1,phy_pkts_lost0,phy_pkts_lost1,phy_pkts_sent0,
+# phy_pkts_sent1,empirical_per) - NOT $17 (that's phy_pkts_lost0, a raw
+# packet count, which is why AvgObsPER used to show absurdly high values).
+for per in "${PER_LEVELS[@]}"; do
+    distance="${DISTANCE_OF[$per]}"
+    echo "=== PER level $per (distance=${distance}m) ==="
+    printf "%-18s %-24s %-8s %12s %12s %12s\n" "KEM" "Signature" "Runs" "SuccessRate" "AvgTime(s)" "AvgObsPER"
+    printf -- '-%.0s' $(seq 1 90); echo
+    awk -F',' -v target_per="$per" 'NR > 1 && $4 == target_per {
+        key = $1 "|" $2
+        total[key]++
+        kemof[key] = $1; sigof[key] = $2
+        if ($6 == "AUTHENTICATED") {
+            ok[key]++
+            if ($7 != "-") { sum_elapsed[key] += $7; n_elapsed[key]++ }
+        }
+        if ($21 != "-") { sum_per[key] += $21; n_per[key]++ }
     }
-    if ($17 != "-") { sum_per[key] += $17; n_per[key]++ }
-}
-END {
-    printf "%-16s %-26s %-8s %-8s %-10s %-14s %-14s\n", "KEM", "Signature", "PER", "Runs", "SuccessRate", "AvgTime(s)", "AvgObsPER"
-    print "-----------------------------------------------------------------------------------------------------"
-    for (key in total) {
-        sr = (total[key] > 0) ? (ok[key] + 0) / total[key] * 100 : 0
-        avg_t = (n_elapsed[key] > 0) ? sum_elapsed[key] / n_elapsed[key] : 0
-        avg_p = (n_per[key] > 0) ? sum_per[key] / n_per[key] * 100 : 0
-        printf "%-16s %-26s %-8s %-8d %-13.1f%% %-14.2f %-13.1f%%\n", kemof[key], sigof[key], perof[key], total[key], sr, avg_t, avg_p
-    }
-}' "$RESULTS_CSV" | sort -k1,1 -k2,2 -k3,3n
+    END {
+        for (key in total) {
+            sr = (total[key] > 0) ? (ok[key] + 0) / total[key] * 100 : 0
+            avg_t = (n_elapsed[key] > 0) ? sum_elapsed[key] / n_elapsed[key] : 0
+            avg_p = (n_per[key] > 0) ? sum_per[key] / n_per[key] * 100 : 0
+            printf "%-18s %-24s %-8d %11.1f%% %12.2f %11.1f%%\n", kemof[key], sigof[key], total[key], sr, avg_t, avg_p
+        }
+    }' "$RESULTS_CSV" | sort -k5,5n
+    echo
+done
 
-echo
-echo "Per-protocol overall summary (across all PER levels):"
+echo "Global summary (per-protocol, across all PER levels), sorted by average handshake time:"
 echo
 
+printf "%-18s %-24s %-8s %12s %12s\n" "KEM" "Signature" "Runs" "SuccessRate" "AvgTime(s)"
+printf -- '-%.0s' $(seq 1 78); echo
 awk -F',' 'NR > 1 {
     key = $1 "|" $2
     total[key]++
@@ -150,11 +175,9 @@ awk -F',' 'NR > 1 {
     }
 }
 END {
-    printf "%-16s %-26s %-10s %-14s %-14s\n", "KEM", "Signature", "Runs", "SuccessRate", "AvgTime(s)"
-    print "---------------------------------------------------------------------------------"
     for (key in total) {
         sr = (total[key] > 0) ? (ok[key] + 0) / total[key] * 100 : 0
         avg_t = (n_elapsed[key] > 0) ? sum_elapsed[key] / n_elapsed[key] : 0
-        printf "%-16s %-26s %-10d %-13.1f%% %-14.2f\n", kemof[key], sigof[key], total[key], sr, avg_t
+        printf "%-18s %-24s %-8d %11.1f%% %12.2f\n", kemof[key], sigof[key], total[key], sr, avg_t
     }
-}' "$RESULTS_CSV" | sort -k1,1 -k2,2
+}' "$RESULTS_CSV" | sort -k5,5n

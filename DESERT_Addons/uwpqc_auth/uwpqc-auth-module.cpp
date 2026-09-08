@@ -90,6 +90,12 @@ UwPqcAuthRetransmitTimer::expire(Event *)
 	module_->onRetransmitTimeout();
 }
 
+void
+UwPqcAuthGapTimer::expire(Event *)
+{
+	module_->onGapTimeout();
+}
+
 UwPqcAuthModule::UwPqcAuthModule()
 	: dest_port_(0)
 	, dest_addr_(0)
@@ -98,14 +104,19 @@ UwPqcAuthModule::UwPqcAuthModule()
 	, max_fragment_payload_(UWPQC_AUTH_FRAGMENT_SIZE)
 	, retransmit_timeout_(8.0)
 	, max_retries_(3)
+	, gap_timeout_(4.0)
+	, max_nak_retries_(100)
 	, state_(IDLE)
 	, peer_(0)
 	, session_id_(0)
 	, next_sequence_(1)
+	, active_sequence_(0)
 	, uid_counter_(0)
 	, retry_count_(0)
+	, nak_retry_count_(0)
 	, handshake_started_(0.0)
 	, retransmit_timer_(this)
+	, gap_timer_(this)
 	, active_type_(0)
 	, tx_packets_(0)
 	, rx_packets_(0)
@@ -114,6 +125,9 @@ UwPqcAuthModule::UwPqcAuthModule()
 	, tx_fragments_(0)
 	, rx_fragments_(0)
 	, retransmissions_(0)
+	, selective_retransmissions_(0)
+	, naks_sent_(0)
+	, naks_received_(0)
 	, signature_failures_(0)
 	, malformed_packets_(0)
 	, replayed_hellos_(0)
@@ -128,11 +142,14 @@ UwPqcAuthModule::UwPqcAuthModule()
 	bind("maxFragmentPayload_", &max_fragment_payload_);
 	bind("retransmitTimeout_", &retransmit_timeout_);
 	bind("maxRetries_", &max_retries_);
+	bind("gapTimeout_", &gap_timeout_);
+	bind("maxNakRetries_", &max_nak_retries_);
 }
 
 UwPqcAuthModule::~UwPqcAuthModule()
 {
 	retransmit_timer_.force_cancel();
+	gap_timer_.force_cancel();
 	crypto_.cleanse(identity_secret_key_);
 	resetSessionSecrets();
 }
@@ -255,6 +272,12 @@ void
 UwPqcAuthModule::recv(Packet *packet)
 {
 	hdr_uwpqc_auth *header = HDR_UWPQC_AUTH(packet);
+	if (header->version_ == kProtocolVersion && header->type_ == PQC_FRAGMENT_NAK
+			&& header->receiver_ == local_addr_) {
+		handleNak(header);
+		Packet::free(packet);
+		return;
+	}
 	uint64_t session = networkToHost64(header->session_id_);
 	uint32_t sequence = ntohl(header->sequence_);
 	uint16_t index = ntohs(header->fragment_index_);
@@ -281,9 +304,16 @@ UwPqcAuthModule::recv(Packet *packet)
 		reassembly_.fragment_count = count;
 		reassembly_.fragments.resize(count);
 		reassembly_.received.assign(count, false);
+		nak_retry_count_ = 0;
 	}
-	if (reassembly_.fragment_count != count || reassembly_.received[index]) {
+	if (reassembly_.fragment_count != count) {
 		++malformed_packets_;
+		Packet::free(packet);
+		return;
+	}
+	if (reassembly_.received[index]) {
+		// Harmless duplicate - e.g. a selectively-retransmitted fragment that
+		// crossed paths with the original also getting through. Not an error.
 		Packet::free(packet);
 		return;
 	}
@@ -292,14 +322,107 @@ UwPqcAuthModule::recv(Packet *packet)
 	bool complete = std::all_of(reassembly_.received.begin(), reassembly_.received.end(),
 			[](bool received) { return received; });
 	if (complete) {
+		gap_timer_.force_cancel();
 		std::vector<uint8_t> message;
 		for (const auto &fragment : reassembly_.fragments)
 			message.insert(message.end(), fragment.begin(), fragment.end());
 		handleComplete(reassembly_.type, reassembly_.sender, reassembly_.receiver,
 				reassembly_.session_id, message);
 		reassembly_ = Reassembly();
+		nak_retry_count_ = 0;
+	} else {
+		// Reset the "idle since last fragment" gap timer; if it fires before
+		// the rest arrive, we'll NAK just the missing indices.
+		gap_timer_.resched(gap_timeout_);
 	}
 	Packet::free(packet);
+}
+
+void
+UwPqcAuthModule::onGapTimeout()
+{
+	if (reassembly_.fragment_count == 0 || nak_retry_count_ >= max_nak_retries_)
+		return;
+	++nak_retry_count_;
+	sendNak();
+	gap_timer_.resched(gap_timeout_);
+}
+
+void
+UwPqcAuthModule::sendNak()
+{
+	if (reassembly_.fragment_count == 0)
+		return;
+	Packet *packet = Packet::alloc();
+	hdr_cmn *common = HDR_CMN(packet);
+	hdr_uwudp *udp = HDR_UWUDP(packet);
+	hdr_uwip *ip = HDR_UWIP(packet);
+	hdr_uwpqc_auth *header = HDR_UWPQC_AUTH(packet);
+	common->uid() = uid_counter_++;
+	common->ptype() = PT_UWPQC_AUTH;
+	common->direction() = hdr_cmn::DOWN;
+	common->timestamp() = NOW;
+	common->size() = sizeof(hdr_uwpqc_auth);
+	udp->dport() = static_cast<uint8_t>(dest_port_);
+	ip->daddr() = static_cast<uint8_t>(dest_addr_);
+	header->version_ = kProtocolVersion;
+	header->type_ = PQC_FRAGMENT_NAK;
+	header->sender_ = static_cast<uint8_t>(local_addr_);
+	header->receiver_ = reassembly_.sender;
+	header->session_id_ = hostToNetwork64(reassembly_.session_id);
+	header->sequence_ = htonl(reassembly_.sequence);
+	header->fragment_index_ = htons(0);
+	header->fragment_count_ = htons(reassembly_.fragment_count);
+	memset(header->payload_, 0, sizeof(header->payload_));
+	size_t bitmap_bytes = (static_cast<size_t>(reassembly_.fragment_count) + 7) / 8;
+	for (uint16_t i = 0; i < reassembly_.fragment_count; ++i) {
+		if (!reassembly_.received[i])
+			header->payload_[i / 8] |= static_cast<uint8_t>(1u << (i % 8));
+	}
+	header->payload_length_ = htons(static_cast<uint16_t>(bitmap_bytes));
+	++tx_packets_;
+	++naks_sent_;
+	sendDown(packet, 0.0);
+}
+
+void
+UwPqcAuthModule::handleNak(const hdr_uwpqc_auth *header)
+{
+	++naks_received_;
+	if (active_message_.empty() || header->sender_ != peer_)
+		return;
+	uint64_t session = networkToHost64(header->session_id_);
+	uint32_t sequence = ntohl(header->sequence_);
+	uint16_t count = ntohs(header->fragment_count_);
+	if (session != session_id_ || sequence != active_sequence_ || count == 0)
+		return;
+	uint16_t total_count = static_cast<uint16_t>(
+			(active_message_.size() + max_fragment_payload_ - 1) / max_fragment_payload_);
+	if (count != total_count)
+		return;
+	size_t bitmap_bytes = (static_cast<size_t>(count) + 7) / 8;
+	if (ntohs(header->payload_length_) < bitmap_bytes || bitmap_bytes > sizeof(header->payload_))
+		return;
+	double delay = 0.0;
+	bool any = false;
+	for (uint16_t index = 0; index < count; ++index) {
+		bool missing = (header->payload_[index / 8] >> (index % 8)) & 0x1;
+		if (!missing)
+			continue;
+		any = true;
+		size_t offset = index * max_fragment_payload_;
+		size_t length = std::min<size_t>(max_fragment_payload_, active_message_.size() - offset);
+		sendFragment(active_type_, session_id_, sequence, index, count,
+				active_message_.data() + offset, length, delay);
+		delay += kFragmentSpacing;
+		++selective_retransmissions_;
+	}
+	if (any) {
+		// The link is alive and productive - give the receiver more time to
+		// finish reassembling instead of letting the full-message timer fire
+		// mid-repair and restart everything from scratch.
+		retransmit_timer_.resched(retransmit_timeout_ + (count - 1) * kFragmentSpacing);
+	}
 }
 
 void
@@ -314,6 +437,7 @@ UwPqcAuthModule::sendLogical(
 	if (count == 0 || count > 1024)
 		return fail("invalid fragment count");
 	uint32_t sequence = ++next_sequence_;
+	active_sequence_ = sequence;
 	for (uint16_t index = 0; index < count; ++index) {
 		size_t offset = index * max_fragment_payload_;
 		size_t length = std::min<size_t>(max_fragment_payload_, message.size() - offset);
@@ -373,6 +497,7 @@ UwPqcAuthModule::onRetransmitTimeout()
 	uint16_t count = static_cast<uint16_t>((active_message_.size() + max_fragment_payload_ - 1)
 			/ max_fragment_payload_);
 	uint32_t sequence = ++next_sequence_;
+	active_sequence_ = sequence;
 	for (uint16_t index = 0; index < count; ++index) {
 		size_t offset = index * max_fragment_payload_;
 		size_t length = std::min<size_t>(max_fragment_payload_, active_message_.size() - offset);
@@ -656,6 +781,7 @@ UwPqcAuthModule::fail(const char *reason)
 				<< reason << std::endl;
 	}
 	retransmit_timer_.force_cancel();
+	gap_timer_.force_cancel();
 	active_message_.clear();
 	state_ = FAILED;
 }
@@ -670,8 +796,10 @@ UwPqcAuthModule::resetSessionSecrets()
 	crypto_.cleanse(client_finish_);
 	crypto_.cleanse(server_finish_);
 	active_message_.clear();
+	gap_timer_.force_cancel();
 	reassembly_ = Reassembly();
 	retry_count_ = 0;
+	nak_retry_count_ = 0;
 }
 
 const char *
@@ -696,6 +824,9 @@ UwPqcAuthModule::stats() const
 		<< " tx_bytes " << tx_bytes_ << " rx_bytes " << rx_bytes_
 		<< " tx_fragments " << tx_fragments_ << " rx_fragments " << rx_fragments_
 		<< " retransmissions " << retransmissions_
+		<< " selective_retransmissions " << selective_retransmissions_
+		<< " naks_sent " << naks_sent_
+		<< " naks_received " << naks_received_
 		<< " signature_failures " << signature_failures_
 		<< " malformed_packets " << malformed_packets_
 		<< " replayed_hellos " << replayed_hellos_
